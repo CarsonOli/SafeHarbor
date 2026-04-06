@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/Application-Insights-Workbooks/master/schema/workbook.json",
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# SafeHarbor Staging Telemetry Dashboard\\nTracks request volume, failures, and latency for backend health."
+      },
+      "name": "text - header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\\n| where cloud_RoleName == 'safeharbor-api-staging'\\n| summarize Requests=count() by bin(timestamp, 5m)\\n| render timechart",
+        "size": 0,
+        "title": "Request Volume (5m)",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "query - request volume"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\\n| where cloud_RoleName == 'safeharbor-api-staging'\\n| summarize FailureRate = 100.0 * countif(success == false) / count() by bin(timestamp, 5m)\\n| render timechart",
+        "size": 0,
+        "title": "Failure Rate % (5m)",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "query - failure rate"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\\n| where cloud_RoleName == 'safeharbor-api-staging'\\n| summarize P95=percentile(duration,95), Avg=avg(duration) by bin(timestamp, 5m)\\n| render timechart",
+        "size": 0,
+        "title": "Latency (Avg / P95)",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "query - latency"
+    }
+  ],
+  "fallbackResourceIds": []
+}

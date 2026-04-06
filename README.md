@@ -13,6 +13,17 @@ The project follows the architecture defined in `ARCHITECTURE_DECISION_RECORD.md
 - **Identity:** Microsoft Entra ID for staff/admin authn with role-based policies.
 - **Primary roles:** `Admin`, `SocialWorker`, `Fundraising`, `Viewer`.
 
+## Operations additions
+
+This repository now includes:
+
+- **CI pipeline** at `.github/workflows/ci.yml` (frontend lint/typecheck/tests/build + backend build/tests).
+- **CD staging pipeline** at `.github/workflows/cd-staging.yml` (Azure backend + static frontend deployment).
+- **Health checks and telemetry hooks** in `backend/SafeHarbor/SafeHarbor/Program.cs`.
+- **Operational runbooks** in `docs/operations/`.
+- **Non-technical admin SOPs** in `docs/admin/non-technical-admin-guide.md`.
+- **Starter telemetry dashboard JSON** in `infra/azure/staging-telemetry-dashboard.json`.
+
 ## Data sensitivity and handling model
 
 All entities/fields should be tagged conceptually into one of the following classes during modeling and review:
