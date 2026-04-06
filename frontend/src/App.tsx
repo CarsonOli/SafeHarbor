@@ -1,14 +1,27 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
-
-const navigation = [
-  { to: '/', label: 'Home' },
-  { to: '/impact', label: 'Impact Dashboard' },
-  { to: '/login', label: 'Login' },
-  { to: '/privacy', label: 'Privacy' },
-]
+import { useAuth } from './auth/AuthContext'
 
 function App() {
+  const { session, logout } = useAuth()
+
+  const navigation = [
+    { to: '/', label: 'Home' },
+    { to: '/impact', label: 'Impact Dashboard' },
+    ...(session
+      ? [
+          { to: '/app/dashboard', label: 'Admin Dashboard' },
+          { to: '/app/donors', label: 'Donors' },
+          { to: '/app/caseload', label: 'Caseload' },
+          { to: '/app/process-recording', label: 'Process Recording' },
+          { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
+          { to: '/app/reports', label: 'Reports' },
+        ]
+      : []),
+    { to: '/login', label: session ? 'Switch User' : 'Login' },
+    { to: '/privacy', label: 'Privacy' },
+  ]
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -35,6 +48,13 @@ function App() {
                   </NavLink>
                 </li>
               ))}
+              {session && (
+                <li>
+                  <button type="button" className="button button-secondary" onClick={logout}>
+                    Sign out ({session.role})
+                  </button>
+                </li>
+              )}
             </ul>
           </nav>
         </div>

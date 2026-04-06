@@ -1,33 +1,34 @@
 import { useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { roles, type AppRole } from '../auth/authSession'
 
 export function LoginPage() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { login } = useAuth()
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<AppRole>('Viewer')
   const [error, setError] = useState<string | null>(null)
 
   const handleCredentialsSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!username.trim() || !password.trim()) {
-      setError('Please enter both username and password.')
+    if (!email.trim()) {
+      setError('Please enter your work email.')
       return
     }
 
-    // NOTE: The authentication backend is not wired in this sprint.
-    // We keep this UX state explicit so product review can validate failures.
-    setError('Login is currently unavailable. Use your Entra SSO flow when enabled.')
-  }
-
-  const handleEntraRedirect = () => {
-    // NOTE: This placeholder mirrors the eventual redirect button behavior.
-    setError('Microsoft Entra redirect is not configured in this environment.')
+    login(email.trim(), role)
+    const destination = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
+    navigate(destination ?? '/app/dashboard', { replace: true })
   }
 
   return (
     <section aria-labelledby="login-title" className="auth-layout">
       <div className="auth-card">
         <h1 id="login-title">Team login</h1>
-        <p className="caption">Use your credentials or single sign-on with Microsoft Entra.</p>
+        <p className="caption">Use your work identity to access authenticated operational modules.</p>
 
         {error && (
           <p className="form-error" role="alert">
@@ -36,37 +37,28 @@ export function LoginPage() {
         )}
 
         <form onSubmit={handleCredentialsSubmit} className="auth-form">
-          <label htmlFor="username">Username</label>
+          <label htmlFor="email">Work email</label>
           <input
-            id="username"
-            name="username"
-            autoComplete="username"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
+            id="email"
+            name="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
 
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <label htmlFor="role">Role</label>
+          <select id="role" value={role} onChange={(event) => setRole(event.target.value as AppRole)}>
+            {roles.map((roleOption) => (
+              <option key={roleOption} value={roleOption}>
+                {roleOption}
+              </option>
+            ))}
+          </select>
 
           <button type="submit" className="button button-primary">
-            Continue with credentials
+            Sign in
           </button>
         </form>
-
-        <div className="divider" aria-hidden="true">
-          or
-        </div>
-
-        <button type="button" className="button button-secondary" onClick={handleEntraRedirect}>
-          Continue with Microsoft Entra
-        </button>
       </div>
     </section>
   )
