@@ -13,9 +13,9 @@ namespace SafeHarbor.Data
         }
 
         // --- Identity & Roles (Aligned with Instructions) ---
-        public DbSet<StaffProfile> Staff { get; set; } 
+        public DbSet<UserProfile> UserProfiles { get; set; } 
         public DbSet<Role> Roles { get; set; }          
-        public DbSet<StaffRole> StaffRoles { get; set; }
+        public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<StatusState> StatusState { get; set; } 
 
         // --- The Rest of the 17 ---
@@ -56,9 +56,9 @@ namespace SafeHarbor.Data
                 .Property(ca => ca.AmountAllocated)
                 .HasPrecision(18, 2);
 
-            // 2. Composite Key for StaffRole
-            modelBuilder.Entity<StaffRole>()
-                .HasKey(sr => new { sr.StaffProfileId, sr.RoleId });
+            // 2. Composite Key for UserRole
+            modelBuilder.Entity<UserRole>()
+                .HasKey(sr => new { sr.UserProfileId, sr.RoleId });
             
             // 3. Resolve the SQL Server Cascade Path Error
             modelBuilder.Entity<CaseConference>()

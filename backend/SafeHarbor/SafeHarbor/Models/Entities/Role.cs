@@ -5,5 +5,5 @@ public class Role : AuditableEntity
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
 
-    public ICollection<StaffRole> UserRoles { get; set; } = new List<StaffRole>();
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }
