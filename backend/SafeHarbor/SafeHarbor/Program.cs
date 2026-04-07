@@ -26,6 +26,17 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(PolicyNames.AdminOnly, policy => policy.RequireRole("Admin"));
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // TODO: Register production database services when persistence integration is implemented.
 builder.Services.AddSingleton<InMemoryDataStore>();
 builder.Services.AddSingleton<IAuditLogger, AuditLogger>();
@@ -74,7 +85,13 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
