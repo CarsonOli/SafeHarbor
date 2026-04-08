@@ -89,7 +89,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
 builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
-builder.Services.AddSingleton<InMemoryDataStore>();
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
 // TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.
