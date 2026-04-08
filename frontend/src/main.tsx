@@ -18,6 +18,7 @@ import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
+import AdminContributionsPage from './pages/app/AdminContributionsPage';
 
 export const appRoutes = [
   {
@@ -48,9 +49,10 @@ export const appRoutes = [
         element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
-          { path: 'donors', element: <DonorsContributionsPage /> },
+          { path: 'donors', element: <AdminContributionsPage /> },
           { path: 'donor-analytics', element: <AdminDonorAnalyticsPage /> },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
+          { path: 'contributions', element: <AdminContributionsPage /> },
           {
             path: 'process-recording',
             element: <ProtectedRoute allowedRoles={['SocialWorker']} />,

@@ -1,17 +1,11 @@
 import type { DonorDashboardData } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
 
-// Base URL for API calls. Defaults to relative (same origin) in production.
-// Override with VITE_API_BASE_URL in .env.local for local development pointing to a different port.
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-
 const DONOR_DASHBOARD_ENDPOINT = '/api/donor/dashboard'
 const DONOR_CONTRIBUTION_ENDPOINT = '/api/donor/contribution'
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
-// Used when the backend is unavailable (e.g. running frontend in isolation).
-// Values match the seed data in DonorDashboardSeeder.cs so visual testing is consistent.
-// Alice's 14 seeded contributions total $2,550; $2,550 / $47 = 54 girls helped.
 const FALLBACK_DASHBOARD: DonorDashboardData = {
   donorName: 'Alice Nguyen',
   lifetimeDonated: 2550,
@@ -22,10 +16,10 @@ const FALLBACK_DASHBOARD: DonorDashboardData = {
     { month: '2025-07', amount: 75 },
     { month: '2025-08', amount: 150 },
     { month: '2025-09', amount: 250 },
-    { month: '2025-10', amount: 150 }, // two donations in Oct aggregated
+    { month: '2025-10', amount: 150 },
     { month: '2025-11', amount: 300 },
     { month: '2025-12', amount: 500 },
-    { month: '2026-01', amount: 375 }, // two donations in Jan aggregated
+    { month: '2026-01', amount: 375 },
     { month: '2026-02', amount: 150 },
     { month: '2026-03', amount: 250 },
   ],
@@ -33,7 +27,6 @@ const FALLBACK_DASHBOARD: DonorDashboardData = {
     campaignId: '00000000-0003-0000-0000-000000000001',
     campaignName: 'Spring 2026 Safe Homes Drive',
     goalAmount: 50000,
-    // Alice $2,550 + Bob $850 = $3,400 total raised
     totalRaisedAllDonors: 3400,
     thisDonorContributed: 2550,
     progressPercent: 6.8,
@@ -46,14 +39,7 @@ const FALLBACK_DASHBOARD: DonorDashboardData = {
 }
 
 /**
- * Fetches the full donor dashboard for the given email address.
- *
- * The email comes from the frontend auth session (localStorage) and is sent as a query
- * parameter. When real Entra ID auth is wired, the backend will read the email from the
- * JWT claim instead, but this call signature stays the same.
- *
- * Falls back to static mock data if the API call fails, so the page still renders
- * during local frontend development without a running backend.
+ * RESTORED: Fetches the full donor dashboard for the given email address.
  */
 export async function fetchDonorDashboard(email: string): Promise<DonorDashboardData> {
   try {
@@ -77,22 +63,19 @@ export async function fetchDonorDashboard(email: string): Promise<DonorDashboard
 
 /**
  * Submits a new donation for the donor identified by email.
- *
- * After a successful response, the caller should re-fetch the dashboard via
- * fetchDonorDashboard() so all metrics (lifetime total, impact count, campaign progress)
- * update to reflect the new contribution.
- *
- * @param email - The donor's email from the auth session.
- * @param amount - Donation amount in USD. Must be > 0.
- * @param campaignId - Optional campaign GUID. If omitted, the backend auto-assigns to the active campaign.
- * @returns A success message string, or throws an Error if the request failed.
  */
 export async function submitDonation(
   email: string,
   amount: number,
+  frequency: string,
   campaignId?: string,
 ): Promise<string> {
-  const body: { email: string; amount: number; campaignId?: string } = { email, amount }
+  const body: { email: string; amount: number; frequency: string; campaignId?: string } = { 
+    email, 
+    amount, 
+    frequency 
+  }
+  
   if (campaignId) body.campaignId = campaignId
 
   const response = await fetch(`${API_BASE}${DONOR_CONTRIBUTION_ENDPOINT}`, {
@@ -105,7 +88,6 @@ export async function submitDonation(
   })
 
   if (!response.ok) {
-    // Surface the error so the page can display it to the donor.
     const errorData = (await response.json().catch(() => ({}))) as { error?: string }
     throw new Error(errorData.error ?? `Donation failed with status ${response.status}`)
   }

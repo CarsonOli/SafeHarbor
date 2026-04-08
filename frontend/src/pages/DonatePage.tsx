@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { submitDonation } from '../services/donorApi'
@@ -120,7 +120,7 @@ function validateForm(fields: {
 // ── Celebration Component ─────────────────────────────────────────────────────
 
 /** Renders the post-donation success screen with CSS confetti animation. */
-function Celebration({ amount, isDonor }: { amount: number; isDonor: boolean }) {
+function Celebration({ amount, isDonor, isMonthly }: { amount: number; isDonor: boolean; isMonthly: boolean }) {
   const navigate = useNavigate()
 
   return (
@@ -159,7 +159,7 @@ function Celebration({ amount, isDonor }: { amount: number; isDonor: boolean }) 
         <h2>Thank You!</h2>
         <p className="lead">
           Your{' '}
-          <strong>{formatDonateAmount(amount)}</strong> donation to SafeHarbor
+          <strong>{formatDonateAmount(amount)}</strong> {isMonthly ? 'monthly ' : ''} donation to SafeHarbor
           International is making a difference.
         </p>
         <p className="caption">
@@ -253,6 +253,7 @@ export function DonatePage() {
   const isDonor = session?.role === 'Donor'
 
   // ── Form state ────────────────────────────────────────────────────────────
+  const [isMonthly, setIsMonthly]           = useState(false) // NEW: Recurring toggle
   const [selectedPreset, setSelectedPreset] = useState<number | null>(100) // default $100
   const [customAmount, setCustomAmount]     = useState('')
 
@@ -267,7 +268,7 @@ export function DonatePage() {
   const [cvv,        setCvv]        = useState('')
 
   const [errors,  setErrors]  = useState<Record<string, string>>({})
-  const [status,  setStatus]  = useState<'idle' | 'visitor-modal' | 'processing' | 'success' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'visitor-modal' | 'processing' | 'success' | 'error'>('idle')
   const [apiError, setApiError] = useState<string | null>(null)
 
   /** Resolves the final donation amount from preset or custom input. */
@@ -325,7 +326,7 @@ export function DonatePage() {
     if (isDonor && session?.email) {
       try {
         // Record the donation in the backend so it appears on /donor/dashboard.
-        await submitDonation(session.email, amount)
+        await submitDonation(session.email, amount, isMonthly ? 'Monthly' : 'One-time')
       } catch (err) {
         // Non-fatal: show a warning but still celebrate the simulated success.
         console.warn('[DonatePage] Failed to record donation to backend:', err)
@@ -341,13 +342,19 @@ export function DonatePage() {
   const buttonLabel  = status === 'processing'
     ? 'Processing…'
     : amount
-    ? `Donate ${formatDonateAmount(amount)} Now →`
+    ? `Donate ${formatDonateAmount(amount)}${isMonthly ? ' Monthly' : ''} Now →`
     : 'Donate Now →'
 
   // ── Render: success celebration ───────────────────────────────────────────
 
   if (status === 'success') {
-    return <Celebration amount={amount ?? 0} isDonor={isDonor} />
+    return (
+      <div className="donate-celebration-wrapper">
+         {/* You can update your Celebration component to say "Monthly Donation" here */}
+         <Celebration amount={amount ?? 0} isDonor={isDonor} isMonthly={isMonthly} />
+         {isMonthly && <p className="recurring-note">Your first monthly gift is being processed!</p>}
+      </div>
+    )
   }
 
   // ── Render: donation form ─────────────────────────────────────────────────
@@ -378,8 +385,25 @@ export function DonatePage() {
 
       {/* ── Step 1: Gift Amount ────────────────────────────────────────────── */}
       <div className="donate-form-card">
-        <p className="donate-step-label">Step 1 — Choose your gift amount</p>
+        <p className="donate-step-label">Step 1 — Choose your gift frequency and amount</p>
 
+        <div className="donation-frequency-toggle">
+          <button 
+            type="button"
+            className={`toggle-btn ${!isMonthly ? 'active' : ''}`}
+            onClick={() => setIsMonthly(false)}
+          >
+            One-time
+          </button>
+          <button 
+            type="button"
+            className={`toggle-btn ${isMonthly ? 'active' : ''}`}
+            onClick={() => setIsMonthly(true)}
+          >
+            Monthly
+          </button>
+        </div>
+        
         {/* Preset amount quick-select buttons */}
         <div className="donor-amount-presets" role="group" aria-label="Preset donation amounts">
           {PRESET_AMOUNTS.map(preset => (
@@ -396,6 +420,7 @@ export function DonatePage() {
               aria-pressed={selectedPreset === preset && customAmount === ''}
             >
               {formatDonateAmount(preset)}
+              {isMonthly && <span className="per-month">/mo</span>}
             </button>
           ))}
         </div>

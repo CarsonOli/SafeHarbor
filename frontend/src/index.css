@@ -1,16 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --color-bg: #f8f5f1;
+  /* Brand Colors - High-End Teal Palette */
+  --color-bg: #f4f8f9;           /* Ice blue/gray background */
   --color-surface: #ffffff;
   --color-text: #172535;
-  --color-subtle: #4d5a66;
-  --color-border: #d6dde2;
-  --color-primary: #2a5c5c;
+  --color-subtle: #5a7684;       /* Muted blue-gray */
+  --color-border: #cadce0;
+  --color-primary: #2a5c5c;      /* Deep SafeHarbor Teal */
   --color-primary-contrast: #ffffff;
-  --color-secondary: #e9f3f3;
+  --color-secondary: #d9e8e8;    /* Soft teal wash */
   --color-danger: #b42318;
-  --color-accent: #e8704a;
+  --color-accent: #e8704a;       /* Action Orange */
   --color-accent-soft: #fff1ec;
   --color-muted-track: #e3eaee;
 
@@ -71,7 +72,11 @@ body {
 }
 
 .site-header {
-  background: var(--color-surface);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px); 
+  position: sticky;
+  top: 0;
+  z-index: 100;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -457,13 +462,13 @@ select {
 /* Hero "Donate Now" button on the homepage — orange to draw attention */
 .button-donate-hero {
   background: var(--color-accent);
-  color: var(--color-primary-contrast);
+  color: white;
   border-radius: 9999px;
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-8); /* Bigger padding for pro look */
   font-weight: 700;
-  border: none;
   text-decoration: none;
-  transition: opacity 0.15s ease;
+  font-size: 1.1rem;
+  transition: opacity 0.2s;
 }
 
 .button-donate-hero:hover {
@@ -823,4 +828,225 @@ select {
   font-size: 3rem;
   color: var(--color-hero-bg);
   line-height: 1.1;
+}
+
+/* ── Donation Page Additions ──────────────────────────────────────────────── */
+
+.donation-frequency-toggle {
+  display: flex;
+  background: #f4f4f4; /* Light grey to match the Base44 'clean' look */
+  padding: 4px;
+  border-radius: 50px;
+  margin-bottom: 2rem;
+  width: fit-content;
+  border: 1px solid #e0e0e0;
+}
+
+.toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 10px 24px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #666;
+  transition: all 0.2s ease-in-out;
+}
+
+.toggle-btn.active {
+  background: #2056d6; /* Using that strong blue from your screenshots */
+  color: white;
+  box-shadow: 0 4px 12px rgba(32, 86, 214, 0.2);
+}
+
+.per-month {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+/* Enhancing the preset buttons for the 'Monthly' look */
+.donor-amount-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+}
+
+/* --- THE HERO OVERLAY EFFECT --- */
+.hero-wrapper {
+  position: relative;
+  min-height: 80vh; /* Takes up most of the screen */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+  /* Replace this URL with your actual image path */
+  background: url('/path-to-your-office-image.jpg') no-repeat center center/cover;
+}
+
+/* This is the magic teal accent layer */
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom, 
+    rgba(42, 92, 92, 0.85), /* Your --color-primary with 85% opacity */
+    rgba(23, 37, 53, 0.9)   /* Fades into a deeper navy/teal */
+  );
+  z-index: 1;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2; /* Sits on top of the overlay */
+  max-width: 800px;
+  padding: var(--space-6);
+}
+
+.hero-content h1 {
+  color: white;
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.hero-content .lead {
+  font-size: 1.35rem;
+  max-width: 650px;
+  margin: 0 auto var(--space-6);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hero-content p {
+  font-size: clamp(3rem, 8vw, 5rem); /* Really big, but scales down on mobile */
+  letter-spacing: -0.02em;
+  margin: var(--space-4) 0;
+}
+
+/* Secondary "Ghost" button for 'Stories of Hope' */
+.button-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: white;
+  border-radius: 9999px;
+  padding: var(--space-4) var(--space-8);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.button-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: white;
+}
+
+/* --- THE HERO OVERLAY EFFECT --- */
+.hero-wrapper {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  min-height: 85vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  /* Ensure this image exists in your public folder */
+  background: url('/hero-background.jpg') no-repeat center 20%/cover;
+  overflow: hidden;
+}
+
+/* This is the magic teal accent layer */
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg, 
+    rgba(23, 37, 53, 0.85) 0%, 
+    rgba(42, 92, 92, 0.7) 100%
+  );
+  z-index: 1;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2; /* Sits on top of the overlay */
+  max-width: 900px;
+  padding: 0 var(--space-6);
+  text-align: center;
+}
+
+.hero-content h1 {
+  font-size: clamp(3rem, 7vw, 5.5rem); /* Massive font */
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em; /* Tighter letters = more professional */
+  margin: var(--space-3) 0 var(--space-5);
+  color: #ffffff;
+}
+
+.hero-content .eyebrow {
+  letter-spacing: 0.3em; /* Luxury spaced-out look */
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--color-accent); /* Small pop of orange */
+}
+
+.hero-content p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.25rem;
+}
+
+/* Secondary "Ghost" button for 'Stories of Hope' */
+.button-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: white;
+  border-radius: 9999px;
+  padding: var(--space-3) var(--space-6);
+  transition: all 0.2s ease;
+}
+
+.button-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: white;
+}
+
+/* Make cards feel like part of the brand */
+.feature-card, .metric-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-primary); /* The pro 'accent stripe' */
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: 0 15px 35px rgba(23, 37, 53, 0.05);
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+/* Make the footer dark teal with white text */
+.site-footer {
+  background: var(--color-primary);
+  color: white;
+  padding: var(--space-8) 0;
+  margin-top: var(--space-8);
+}
+
+.site-footer p {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Change the navigation hover effect to use teal */
+.nav-link:hover {
+  background: var(--color-secondary);
+  color: var(--color-primary);
 }

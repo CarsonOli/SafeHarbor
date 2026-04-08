@@ -21,7 +21,7 @@ function App() {
     ...(isStaff
       ? [
           { to: '/app/dashboard', label: 'Admin Dashboard' },
-          { to: '/app/donors', label: 'Donors' },
+          { to: '/app/donors', label: 'Manage Contributions' },
           { to: '/app/donor-analytics', label: 'Donor Analytics' },
           { to: '/app/caseload', label: 'Caseload' },
           { to: '/app/process-recording', label: 'Process Recording' },
