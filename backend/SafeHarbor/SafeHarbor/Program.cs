@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore; 
 using Microsoft.Identity.Web;
+using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -26,8 +27,37 @@ builder.Services.AddDbContext<SafeHarborDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 // --- DATABASE REGISTRATION END ---
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+var localAuthEnabled = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
+var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
+
+if (localAuthEnabled)
+{
+    // Development-only JWT validation path. This keeps local auth deterministic while preserving
+    // the same bearer-token middleware used in production with Entra ID.
+    var issuer = builder.Configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
+    var audience = builder.Configuration["LocalAuth:Audience"] ?? "safeharbor-local-client";
+    var signingKey = builder.Configuration["LocalAuth:SigningKey"]
+        ?? throw new InvalidOperationException("LocalAuth:SigningKey is required when LocalAuth:Enabled=true.");
+
+    authBuilder.AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = issuer,
+            ValidateAudience = true,
+            ValidAudience = audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(signingKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+}
+else
+{
+    authBuilder.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+}
 
 builder.Services.AddAuthorization(options =>
 {

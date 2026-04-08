@@ -10,6 +10,7 @@ export type AppRole = (typeof roles)[number]
 export type AuthSession = {
   email: string
   role: AppRole
+  idToken?: string
 }
 
 const AUTH_KEY = 'safeharbor.auth.session'
@@ -23,6 +24,12 @@ export function loadSession(): AuthSession | null {
   try {
     const parsed = JSON.parse(value) as AuthSession
     if (!parsed.email || !roles.includes(parsed.role)) {
+      return null
+    }
+
+    // Preserve backward compatibility with older localStorage payloads while still
+    // validating shape for new auth flows that persist an ID token.
+    if (parsed.idToken !== undefined && typeof parsed.idToken !== 'string') {
       return null
     }
 

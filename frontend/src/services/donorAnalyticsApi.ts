@@ -1,4 +1,5 @@
 import type { DonorAnalyticsData } from '../types/impact'
+import { buildAuthHeaders } from './authHeaders'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const ANALYTICS_ENDPOINT = '/api/admin/donor-analytics'
@@ -59,7 +60,7 @@ export async function fetchDonorAnalytics(): Promise<DonorAnalyticsData> {
   try {
     const response = await fetch(`${API_BASE}${ANALYTICS_ENDPOINT}`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: buildAuthHeaders({ Accept: 'application/json' }),
     })
 
     if (!response.ok) {

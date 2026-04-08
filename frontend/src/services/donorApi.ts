@@ -1,4 +1,5 @@
 import type { DonorDashboardData } from '../types/impact'
+import { buildAuthHeaders } from './authHeaders'
 
 // Base URL for API calls. Defaults to relative (same origin) in production.
 // Override with VITE_API_BASE_URL in .env.local for local development pointing to a different port.
@@ -59,7 +60,7 @@ export async function fetchDonorDashboard(email: string): Promise<DonorDashboard
     const url = `${API_BASE}${DONOR_DASHBOARD_ENDPOINT}?email=${encodeURIComponent(email)}`
     const response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: buildAuthHeaders({ Accept: 'application/json' }),
     })
 
     if (!response.ok) {
@@ -96,10 +97,10 @@ export async function submitDonation(
 
   const response = await fetch(`${API_BASE}${DONOR_CONTRIBUTION_ENDPOINT}`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
       Accept: 'application/json',
-    },
+    }),
     body: JSON.stringify(body),
   })
 

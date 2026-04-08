@@ -4,7 +4,7 @@ import { roles, type AppRole, type AuthSession, loadSession, persistSession } fr
 type AuthContextValue = {
   session: AuthSession | null
   loginWithIdentityToken: (idToken: string) => AppRole
-  loginForDevelopment: (email: string, role: AppRole) => void
+  loginForDevelopment: (email: string, role: AppRole, idToken?: string) => void
   logout: () => void
 }
 
@@ -78,13 +78,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // depend on user-selected UI input.
         const role = resolveRoleFromClaims(claims)
         const email = resolveEmailFromClaims(claims)
-        const nextSession = { email, role }
+        const nextSession = { email, role, idToken }
         setSession(nextSession)
         persistSession(nextSession)
         return role
       },
-      loginForDevelopment: (email, role) => {
-        const nextSession = { email, role }
+      loginForDevelopment: (email, role, idToken) => {
+        // NOTE: Local development auth can pass a backend-issued test token so
+        // API calls exercise the same bearer-token path used in production.
+        const nextSession = { email, role, idToken }
         setSession(nextSession)
         persistSession(nextSession)
       },

@@ -4,6 +4,7 @@ import type {
   ReportsAnalyticsResponse,
   SocialPostMetricListItem,
 } from '../types/impact'
+import { buildAuthHeaders } from './authHeaders'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const IMPACT_ENDPOINT = import.meta.env.VITE_IMPACT_AGGREGATE_PATH ?? '/api/impact/aggregate'
@@ -108,9 +109,9 @@ export async function fetchImpactSummary(): Promise<ImpactSummary> {
     // This client call intentionally requests only rolled-up analytics data.
     const response = await fetch(`${API_BASE}${IMPACT_ENDPOINT}`, {
       method: 'GET',
-      headers: {
+      headers: buildAuthHeaders({
         Accept: 'application/json',
-      },
+      }),
     })
 
     if (!response.ok) {
@@ -129,9 +130,9 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
   try {
     const response = await fetch(`${API_BASE}${REPORTS_ENDPOINT}`, {
       method: 'GET',
-      headers: {
+      headers: buildAuthHeaders({
         Accept: 'application/json',
-      },
+      }),
     })
 
     if (!response.ok) {
@@ -148,9 +149,9 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
 export async function fetchSocialPostMetrics(): Promise<SocialPostMetricListItem[]> {
   const response = await fetch(`${API_BASE}${SOCIAL_METRICS_ENDPOINT}`, {
     method: 'GET',
-    headers: {
+    headers: buildAuthHeaders({
       Accept: 'application/json',
-    },
+    }),
   })
 
   if (!response.ok) {
@@ -165,10 +166,10 @@ export async function createSocialPostMetric(
 ): Promise<SocialPostMetricListItem> {
   const response = await fetch(`${API_BASE}${SOCIAL_METRICS_ENDPOINT}`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders({
       'Content-Type': 'application/json',
       Accept: 'application/json',
-    },
+    }),
     body: JSON.stringify(request),
   })
 

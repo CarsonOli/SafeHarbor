@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { roles, type AppRole } from '../auth/authSession'
+import { requestLocalDevelopmentToken } from '../services/localAuthApi'
 
 type LocationState = { from?: { pathname?: string } } | null
 
@@ -16,6 +17,8 @@ const DEV_ROLE_SIMULATION_ENABLED =
   import.meta.env.DEV &&
   // Keep explicit opt-in support while also unblocking local login flows when IdP env vars are absent.
   (import.meta.env.VITE_ENABLE_DEV_ROLE_SIMULATION === 'true' || !IDENTITY_PROVIDER_CONFIGURED)
+const AUTH_MODE = import.meta.env.VITE_AUTH_MODE ?? 'idp'
+const LOCAL_AUTH_MODE_ENABLED = import.meta.env.DEV && AUTH_MODE === 'local'
 
 function defaultDestinationForRole(role: AppRole): string {
   return role === 'Donor' ? '/donor/dashboard' : '/app/dashboard'
@@ -60,7 +63,7 @@ function buildIdentityProviderAuthorizeUrl(fromPath?: string): string {
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { session, loginWithIdentityToken, loginForDevelopment } = useAuth()
+  const { session, loginWithIdentityToken } = useAuth()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<AppRole>('Admin')
   const [error, setError] = useState<string | null>(null)
@@ -118,7 +121,7 @@ export function LoginPage() {
     }
   }
 
-  const handleDevelopmentSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleDevelopmentSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!email.trim()) {
@@ -126,9 +129,16 @@ export function LoginPage() {
       return
     }
 
-    loginForDevelopment(email.trim(), role)
-    const destination = locationState?.from?.pathname
-    navigate(destination ?? defaultDestinationForRole(role), { replace: true })
+    try {
+      // Local auth mode returns a signed test token from the backend so local API
+      // testing follows the same bearer-token path used in Azure.
+      const idToken = await requestLocalDevelopmentToken(email.trim(), role)
+      const roleFromToken = loginWithIdentityToken(idToken)
+      const destination = locationState?.from?.pathname
+      navigate(destination ?? defaultDestinationForRole(roleFromToken), { replace: true })
+    } catch (authException) {
+      setError(authException instanceof Error ? authException.message : 'Unable to complete local development sign-in.')
+    }
   }
 
   return (
@@ -143,24 +153,31 @@ export function LoginPage() {
           </p>
         )}
 
-        <button
-          type="button"
-          className="button button-primary"
-          onClick={handleIdentityProviderSignIn}
-          disabled={!IDENTITY_PROVIDER_CONFIGURED}
-          title={!IDENTITY_PROVIDER_CONFIGURED ? 'Set VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID in frontend/.env.local.' : undefined}
-        >
-          Sign in with Identity Provider
-        </button>
+        {!LOCAL_AUTH_MODE_ENABLED && (
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={handleIdentityProviderSignIn}
+            disabled={!IDENTITY_PROVIDER_CONFIGURED}
+            title={!IDENTITY_PROVIDER_CONFIGURED ? 'Set VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID in frontend/.env.local.' : undefined}
+          >
+            Sign in with Identity Provider
+          </button>
+        )}
 
-        {DEV_ROLE_SIMULATION_ENABLED && (
+        {(DEV_ROLE_SIMULATION_ENABLED || LOCAL_AUTH_MODE_ENABLED) && (
           <>
             {/*
               Local-only sign-in exists to unblock route testing when
               an external identity provider tenant is unavailable in offline/local environments.
             */}
             <hr aria-hidden="true" />
-            <p className="caption">Local development sign-in (enabled with VITE_ENABLE_DEV_ROLE_SIMULATION=true)</p>
+            <p className="caption">
+              Local development sign-in
+              {LOCAL_AUTH_MODE_ENABLED
+                ? ' (VITE_AUTH_MODE=local)'
+                : ' (enabled with VITE_ENABLE_DEV_ROLE_SIMULATION=true)'}
+            </p>
 
             <form onSubmit={handleDevelopmentSubmit} className="auth-form">
               <label htmlFor="email">Work email</label>
