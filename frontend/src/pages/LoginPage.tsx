@@ -9,8 +9,13 @@ type IdentityProviderState = {
   fromPath?: string
 }
 
+const IDENTITY_PROVIDER_CONFIGURED =
+  Boolean(import.meta.env.VITE_AUTH_AUTHORIZE_URL) && Boolean(import.meta.env.VITE_AUTH_CLIENT_ID)
+
 const DEV_ROLE_SIMULATION_ENABLED =
-  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_ROLE_SIMULATION === 'true'
+  import.meta.env.DEV &&
+  // Keep explicit opt-in support while also unblocking local login flows when IdP env vars are absent.
+  (import.meta.env.VITE_ENABLE_DEV_ROLE_SIMULATION === 'true' || !IDENTITY_PROVIDER_CONFIGURED)
 
 function defaultDestinationForRole(role: AppRole): string {
   return role === 'Donor' ? '/donor/dashboard' : '/app/dashboard'
@@ -35,7 +40,9 @@ function buildIdentityProviderAuthorizeUrl(fromPath?: string): string {
   const scope = import.meta.env.VITE_AUTH_SCOPE ?? 'openid profile email'
 
   if (!authorizeEndpoint || !clientId) {
-    throw new Error('Identity provider settings are missing. Configure VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID.')
+    throw new Error(
+      'Identity provider settings are missing. Add VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID to frontend/.env.local.'
+    )
   }
 
   const params = new URLSearchParams({
@@ -97,6 +104,12 @@ export function LoginPage() {
 
   const handleIdentityProviderSignIn = () => {
     setError(null)
+
+    if (!IDENTITY_PROVIDER_CONFIGURED) {
+      setError('Identity provider settings are missing. Configure frontend/.env.local or use Development role simulation below.')
+      return
+    }
+
     try {
       const fromPath = locationState?.from?.pathname
       window.location.assign(buildIdentityProviderAuthorizeUrl(fromPath))
@@ -130,7 +143,13 @@ export function LoginPage() {
           </p>
         )}
 
-        <button type="button" className="button button-primary" onClick={handleIdentityProviderSignIn}>
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={handleIdentityProviderSignIn}
+          disabled={!IDENTITY_PROVIDER_CONFIGURED}
+          title={!IDENTITY_PROVIDER_CONFIGURED ? 'Set VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID in frontend/.env.local.' : undefined}
+        >
           Sign in with Identity Provider
         </button>
 

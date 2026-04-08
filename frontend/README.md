@@ -1,5 +1,22 @@
 # React + TypeScript + Vite
 
+## Local auth setup
+
+The login page expects identity-provider environment variables in `frontend/.env.local`.
+Copy `frontend/.env.example` and fill in your tenant values:
+
+```bash
+cp .env.example .env.local
+```
+
+Required variables:
+
+- `VITE_AUTH_AUTHORIZE_URL`
+- `VITE_AUTH_CLIENT_ID`
+
+If you do not have an IdP tenant for local work yet, keep `VITE_ENABLE_DEV_ROLE_SIMULATION=true` so `/login` exposes the development role simulation form.
+
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
