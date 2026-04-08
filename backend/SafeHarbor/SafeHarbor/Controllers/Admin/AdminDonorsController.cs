@@ -34,7 +34,7 @@ public sealed class AdminDonorsController(
     [HttpPost]
     public ActionResult<DonorAdminResponse> Create([FromBody] DonorCreateRequest request)
     {
-        var donor = new Models.Donor
+        var donor = new Donor
         {
             DisplayName = request.DisplayName,
             Email = request.Email,
@@ -84,7 +84,7 @@ public sealed class AdminDonorsController(
         return Ok(retentionRedactionService.ApplyRetentionPolicy(payload, "donor_summary_report"));
     }
 
-    private static DonorAdminResponse MapAdmin(Models.Donor donor) =>
+    private static DonorAdminResponse MapAdmin(Donor donor) =>
         new(
             donor.Id,
             donor.DisplayName,

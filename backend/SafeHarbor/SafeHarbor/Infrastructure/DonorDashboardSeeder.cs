@@ -1,4 +1,3 @@
-using SafeHarbor.Models;
 using SafeHarbor.Models.Entities;
 
 namespace SafeHarbor.Infrastructure;
@@ -42,7 +41,7 @@ public static class DonorDashboardSeeder
 
         // ── Donors ────────────────────────────────────────────────────────────
         // Primary test donor — use alice@example.com with role "Donor" to test the dashboard.
-        var alice = new Models.Donor
+        var alice = new Donor
         {
             Id = AliceId,
             DisplayName = "Alice Nguyen",
@@ -52,7 +51,7 @@ public static class DonorDashboardSeeder
         };
 
         // Secondary test donor — use bob@example.com to verify campaign totals reflect multiple donors.
-        var bob = new Models.Donor
+        var bob = new Donor
         {
             Id = BobId,
             DisplayName = "Bob Chen",

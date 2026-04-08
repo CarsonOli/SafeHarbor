@@ -6,6 +6,7 @@ using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
 using SafeHarbor.Models.Entities;
 using SafeHarbor.Services.DonorImpact;
+using DonorEntity = SafeHarbor.Models.Entities.Donor;
 
 namespace SafeHarbor.Controllers.Donor;
 
@@ -142,7 +143,7 @@ public sealed class DonorDashboardController(
     /// Claim-based scoping is required to prevent horizontal data exposure where one donor could
     /// submit another donor's email address and read or mutate data outside their own account.
     /// </remarks>
-    private (Donor? Donor, ActionResult? ErrorResult) TryResolveAuthenticatedDonor()
+    private (DonorEntity? Donor, ActionResult? ErrorResult) TryResolveAuthenticatedDonor()
     {
         var email = User.FindFirstValue(ClaimTypes.Email)
             ?? User.FindFirstValue("emails")
@@ -153,7 +154,9 @@ public sealed class DonorDashboardController(
             ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub");
 
-        Donor? donor = null;
+        // NOTE: Alias is intentional because this controller's namespace is also named `Donor`.
+        // Without explicit aliasing, `Donor` resolves to the namespace instead of the entity type.
+        DonorEntity? donor = null;
 
         // Prefer object identifier when present because it is stable even when email changes.
         if (!string.IsNullOrWhiteSpace(objectIdValue) && Guid.TryParse(objectIdValue, out var donorId))
