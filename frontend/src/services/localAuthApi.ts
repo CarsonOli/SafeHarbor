@@ -22,7 +22,9 @@ function resolveApiBaseCandidates(): string[] {
   if (import.meta.env.DEV) {
     // NOTE: We try same-origin first so teams with a local reverse-proxy keep working.
     // If that returns 404 from the Vite dev server, we fall back to common ASP.NET local ports.
-    return ['', 'http://localhost:5264', 'http://localhost:5000']
+    // Keep :5264 first because this repository's launchSettings.json uses that HTTP endpoint.
+    // Include :7217 as an HTTPS fallback for developers that run with TLS-only profiles.
+    return ['', 'http://localhost:5264', 'https://localhost:7217', 'http://localhost:5000']
   }
 
   return ['']

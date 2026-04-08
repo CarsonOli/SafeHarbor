@@ -17,7 +17,7 @@ Required variables:
 If you want full local end-to-end auth (without Entra tenant setup), use:
 
 - `VITE_AUTH_MODE=local`
-- `VITE_API_BASE_URL=http://localhost:5000` (or your backend local URL)
+- `VITE_API_BASE_URL=http://localhost:5264` (or your backend local URL)
 
 In that mode, `/login` uses the backend local auth endpoint (`POST /api/auth/local-login`) to get a signed JWT for local testing. The backend switch is controlled by `LocalAuth:Enabled` in `backend/SafeHarbor/SafeHarbor/appsettings.Development.json`.
 
