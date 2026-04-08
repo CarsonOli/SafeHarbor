@@ -3,6 +3,9 @@ namespace SafeHarbor.Authorization;
 public static class PolicyNames
 {
     public const string AdminOnly = "AdminOnly";
+    public const string StaffOrAdmin = "StaffOrAdmin";
+    public const string SocialWorkerOnly = "SocialWorkerOnly";
+    public const string AuthenticatedUser = "AuthenticatedUser";
 
     /// <summary>
     /// Policy for donor-facing endpoints.

@@ -17,13 +17,12 @@ namespace SafeHarbor.Controllers.Admin;
 /// and a top-donors leaderboard.
 ///
 /// AUTH NOTE:
-///   Currently [AllowAnonymous] to match the in-development auth pattern used
-///   by other admin endpoints. Replace with [Authorize(Policy = PolicyNames.AdminOnly)]
-///   once Entra ID authentication is fully wired.
+///   This endpoint is restricted with PolicyNames.AdminOnly because it surfaces
+///   cross-donor financial aggregates intended for admin reporting workflows.
 /// </summary>
 [ApiController]
 [Route("api/admin/donor-analytics")]
-[AllowAnonymous] // TODO: Replace with [Authorize(Policy = PolicyNames.AdminOnly)] once Entra ID is wired.
+[Authorize(Policy = PolicyNames.AdminOnly)]
 public sealed class AdminDonorAnalyticsController(InMemoryDataStore store) : ControllerBase
 {
     // StatusStateId = 1 means "Completed" for contributions.

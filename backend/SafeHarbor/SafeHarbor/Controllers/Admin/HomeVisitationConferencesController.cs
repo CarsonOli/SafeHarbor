@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/visitation-conferences")]
-[Authorize]
+[Authorize(Policy = PolicyNames.StaffOrAdmin)]
 public sealed class HomeVisitationConferencesController : ControllerBase
 {
     [HttpGet("visits")]

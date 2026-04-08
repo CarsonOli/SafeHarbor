@@ -32,6 +32,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(PolicyNames.AdminOnly, policy => policy.RequireRole("Admin"));
+    options.AddPolicy(PolicyNames.StaffOrAdmin, policy => policy.RequireRole("Admin", "SocialWorker"));
+    options.AddPolicy(PolicyNames.SocialWorkerOnly, policy => policy.RequireRole("SocialWorker"));
+    options.AddPolicy(PolicyNames.AuthenticatedUser, policy => policy.RequireAuthenticatedUser());
 
     // DonorOnly restricts donor dashboard endpoints to users with the "Donor" role.
     // Currently the donor controller uses [AllowAnonymous] for local dev; this policy

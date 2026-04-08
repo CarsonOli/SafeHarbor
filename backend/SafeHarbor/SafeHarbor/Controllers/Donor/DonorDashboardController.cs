@@ -16,15 +16,15 @@ namespace SafeHarbor.Controllers.Donor;
 ///   POST /api/donor/contribution              — Records a new donation for a donor.
 ///
 /// AUTHENTICATION NOTE:
-///   Currently uses [AllowAnonymous] because the mock frontend auth (localStorage session)
-///   does not issue real JWT tokens. Once Microsoft Entra ID is wired:
-///     1. Replace [AllowAnonymous] with [Authorize(Policy = PolicyNames.DonorOnly)].
-///     2. Read email from the JWT claim instead of the query/body param:
-///          var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+///   This endpoint now requires an authenticated principal via PolicyNames.AuthenticatedUser
+///   so donor routes no longer run anonymously.
+///   TODO: Tighten to PolicyNames.DonorOnly once Microsoft Entra ID role claims are wired.
+///   TODO: Read email from the JWT claim instead of the query/body param:
+///           var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
 /// </summary>
 [ApiController]
 [Route("api/donor")]
-[AllowAnonymous] // TODO: Replace with [Authorize(Policy = PolicyNames.DonorOnly)] once Entra ID is wired.
+[Authorize(Policy = PolicyNames.AuthenticatedUser)]
 public sealed class DonorDashboardController(
     InMemoryDataStore store,
     IDonorImpactCalculator impactCalculator) : ControllerBase
