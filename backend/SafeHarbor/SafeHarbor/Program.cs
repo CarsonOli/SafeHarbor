@@ -129,3 +129,6 @@ app.MapHealthChecks("/health/ready");
 app.MapControllers();
 
 app.Run();
+
+// Expose a concrete Program type so WebApplicationFactory<Program> can boot the API in integration tests.
+public partial class Program { }

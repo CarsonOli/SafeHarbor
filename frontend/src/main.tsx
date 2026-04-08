@@ -19,7 +19,7 @@ import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
 
-const router = createBrowserRouter([
+export const appRoutes = [
   {
     path: '/',
     element: <App />,
@@ -62,12 +62,18 @@ const router = createBrowserRouter([
       },
     ],
   },
-])
+]
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
-  </StrictMode>,
-)
+export const router = createBrowserRouter(appRoutes)
+
+const rootElement = document.getElementById('root')
+
+if (rootElement) {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </StrictMode>,
+  )
+}
