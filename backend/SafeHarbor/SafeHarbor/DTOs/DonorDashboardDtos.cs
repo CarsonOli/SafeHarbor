@@ -9,7 +9,7 @@ namespace SafeHarbor.DTOs;
 
 /// <summary>
 /// Top-level response for the donor dashboard.
-/// Returned by GET /api/donor/dashboard?email={email}.
+/// Returned by GET /api/donor/dashboard for the authenticated donor.
 /// </summary>
 /// <param name="DonorName">Display name shown in the hero section greeting.</param>
 /// <param name="LifetimeDonated">Sum of all completed contributions by this donor, in USD.</param>
@@ -84,9 +84,9 @@ public sealed record DonorImpactSummary(
 /// Allows a logged-in donor to record an additional donation.
 /// </summary>
 /// <param name="Email">
-///   The donor's email, read from the frontend session.
-///   Used to look up the donor record in the store.
-///   TODO: Replace with a JWT claim read when Entra ID auth is wired.
+///   Deprecated and ignored by the API.
+///   Donor identity is resolved from authenticated claims to prevent horizontal access.
+///   This field remains optional for backward compatibility with older clients.
 /// </param>
 /// <param name="Amount">Donation amount in USD. Must be greater than zero.</param>
 /// <param name="CampaignId">
@@ -94,9 +94,9 @@ public sealed record DonorImpactSummary(
 ///   If omitted, the controller auto-assigns to the currently active campaign.
 /// </param>
 public sealed record NewContributionRequest(
-    string Email,
     decimal Amount,
-    Guid? CampaignId = null);
+    Guid? CampaignId = null,
+    string? Email = null);
 
 /// <summary>
 /// Response body for a successfully recorded contribution.

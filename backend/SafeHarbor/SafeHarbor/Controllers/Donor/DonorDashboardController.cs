@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
@@ -12,15 +13,13 @@ namespace SafeHarbor.Controllers.Donor;
 /// Handles donor-facing dashboard data and donation submissions.
 ///
 /// ENDPOINTS:
-///   GET  /api/donor/dashboard?email={email}  — Returns full dashboard data for one donor.
+///   GET  /api/donor/dashboard                — Returns full dashboard data for the authenticated donor.
 ///   POST /api/donor/contribution              — Records a new donation for a donor.
 ///
 /// AUTHENTICATION NOTE:
 ///   This endpoint now requires an authenticated principal via PolicyNames.AuthenticatedUser
 ///   so donor routes no longer run anonymously.
 ///   TODO: Tighten to PolicyNames.DonorOnly once Microsoft Entra ID role claims are wired.
-///   TODO: Read email from the JWT claim instead of the query/body param:
-///           var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
 /// </summary>
 [ApiController]
 [Route("api/donor")]
@@ -37,26 +36,22 @@ public sealed class DonorDashboardController(
     private const int OnlineDonationTypeId = 1;
 
     /// <summary>
-    /// Returns the full donor dashboard for the given email address.
+    /// Returns the full donor dashboard for the authenticated donor.
     ///
-    /// The frontend passes the email from the localStorage session.
     /// The response includes lifetime totals, 12-month history, campaign goal progress,
     /// and an impact score (girls helped) calculated by the injected IDonorImpactCalculator.
     /// </summary>
-    /// <param name="email">The donor's email address (from the frontend session).</param>
     [HttpGet("dashboard")]
-    public ActionResult<DonorDashboardResponse> GetDashboard([FromQuery] string? email)
+    public ActionResult<DonorDashboardResponse> GetDashboard([FromQuery] string? email = null)
     {
-        // Validate the required email param.
-        if (string.IsNullOrWhiteSpace(email))
-            return BadRequest(new { error = "email query parameter is required." });
+        // NOTE: `email` is intentionally ignored for security and backward compatibility.
+        // The route previously trusted caller-supplied email which allowed horizontal access to
+        // another donor's data. We now scope all donor reads to authenticated identity claims.
+        var donorResolution = TryResolveAuthenticatedDonor();
+        if (donorResolution.ErrorResult is not null)
+            return donorResolution.ErrorResult;
 
-        // Look up the donor by email. Case-insensitive to tolerate minor login differences.
-        var donor = store.Donors.FirstOrDefault(
-            d => string.Equals(d.Email, email, StringComparison.OrdinalIgnoreCase));
-
-        if (donor is null)
-            return NotFound(new { error = $"No donor found with email '{email}'." });
+        var donor = donorResolution.Donor!;
 
         // Get all completed contributions for this donor.
         var donorContributions = store.Contributions
@@ -89,26 +84,21 @@ public sealed class DonorDashboardController(
     }
 
     /// <summary>
-    /// Records a new donation for the donor identified by the email in the request body.
+    /// Records a new donation for the authenticated donor.
     /// After a successful response, the frontend re-fetches GET /api/donor/dashboard
     /// so all metrics update to include this new contribution.
     /// </summary>
     [HttpPost("contribution")]
     public ActionResult<NewContributionResponse> AddContribution([FromBody] NewContributionRequest request)
     {
-        // Validate required fields.
-        if (string.IsNullOrWhiteSpace(request.Email))
-            return BadRequest(new { error = "Email is required." });
-
         if (request.Amount <= 0)
             return BadRequest(new { error = "Amount must be greater than zero." });
 
-        // Look up the donor by email.
-        var donor = store.Donors.FirstOrDefault(
-            d => string.Equals(d.Email, request.Email, StringComparison.OrdinalIgnoreCase));
+        var donorResolution = TryResolveAuthenticatedDonor();
+        if (donorResolution.ErrorResult is not null)
+            return donorResolution.ErrorResult;
 
-        if (donor is null)
-            return NotFound(new { error = $"No donor found with email '{request.Email}'." });
+        var donor = donorResolution.Donor!;
 
         // Resolve the campaign: use the requested campaign ID, or auto-assign to the active campaign.
         Guid? resolvedCampaignId = request.CampaignId;
@@ -140,8 +130,53 @@ public sealed class DonorDashboardController(
 
         return CreatedAtAction(
             nameof(GetDashboard),
-            new { email = request.Email },
+            null,
             new NewContributionResponse(contribution.Id, "Thank you! Your donation has been added."));
+    }
+
+
+    /// <summary>
+    /// Resolves donor scope from authenticated claims only (never from query/body values).
+    /// </summary>
+    /// <remarks>
+    /// Claim-based scoping is required to prevent horizontal data exposure where one donor could
+    /// submit another donor's email address and read or mutate data outside their own account.
+    /// </remarks>
+    private (Donor? Donor, ActionResult? ErrorResult) TryResolveAuthenticatedDonor()
+    {
+        var email = User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue("emails")
+            ?? User.FindFirstValue("preferred_username");
+
+        var objectIdValue = User.FindFirstValue("oid")
+            ?? User.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        Donor? donor = null;
+
+        // Prefer object identifier when present because it is stable even when email changes.
+        if (!string.IsNullOrWhiteSpace(objectIdValue) && Guid.TryParse(objectIdValue, out var donorId))
+        {
+            donor = store.Donors.FirstOrDefault(d => d.Id == donorId);
+        }
+
+        // Fall back to email matching for identity providers that do not emit object IDs.
+        if (donor is null && !string.IsNullOrWhiteSpace(email))
+        {
+            donor = store.Donors.FirstOrDefault(
+                d => string.Equals(d.Email, email, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (donor is not null)
+            return (donor, null);
+
+        // Return 403 when we cannot determine caller identity from claims at all.
+        if (string.IsNullOrWhiteSpace(objectIdValue) && string.IsNullOrWhiteSpace(email))
+            return (null, StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor identity claim is required." }));
+
+        // Return 404 when claims are present but do not map to a donor in our store.
+        return (null, NotFound(new { error = "No donor profile found for the authenticated identity." }));
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
