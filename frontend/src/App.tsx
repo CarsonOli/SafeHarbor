@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 
 function App() {
   const { session, logout } = useAuth()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const isStaff = session?.role === 'Admin' || session?.role === 'SocialWorker'
   const isDonor = session?.role === 'Donor'
 
@@ -31,12 +33,15 @@ function App() {
       : []),
 
     // Donor-only nav link — shown only when logged in as a Donor.
-    ...(isDonor
-      ? [{ to: '/donor/dashboard', label: 'My Donations' }]
-      : []),
+    ...(isDonor ? [{ to: '/donor/dashboard', label: 'My Donations' }] : []),
 
     { to: '/login', label: session ? 'Switch User' : 'Login' },
   ]
+
+  // Keep drawer state consistent when auth role changes reshape the nav list.
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [session?.role])
 
   return (
     <div className="app-shell">
@@ -49,40 +54,63 @@ function App() {
           <div className="brand" aria-label="Safe Harbor">
             Safe Harbor
           </div>
-          <nav aria-label="Primary">
-            <ul className="nav-list">
-              {navigation.map((item) => (
-                <li key={item.to}>
-                  <NavLink
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `nav-link${isActive ? ' nav-link-active' : ''}`
-                    }
-                    end={item.to === '/'}
-                  >
-                    {item.label}
-                  </NavLink>
-                </li>
-              ))}
-              {/* Keep CTA aligned with route guards: only staff can navigate to /donate. */}
-              {isStaff && (
-                <li>
-                  <Link to="/donate" className="button nav-donate-button">
-                    Donate Now
-                  </Link>
-                </li>
-              )}
-              {session && (
-                <li>
-                  <button type="button" className="button button-secondary" onClick={logout}>
-                    Sign out ({session.role})
-                  </button>
-                </li>
-              )}
-            </ul>
-          </nav>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="button button-secondary nav-menu-toggle"
+              onClick={() => setIsMenuOpen((previous) => !previous)}
+              aria-expanded={isMenuOpen}
+              aria-controls="primary-nav-drawer"
+            >
+              {isMenuOpen ? 'Close menu' : 'Open menu'}
+            </button>
+            {session && (
+              <button type="button" className="button button-secondary" onClick={logout}>
+                Sign out ({session.role})
+              </button>
+            )}
+          </div>
         </div>
       </header>
+
+      {isMenuOpen && (
+        <button
+          type="button"
+          className="nav-overlay"
+          aria-label="Close menu"
+          onClick={() => setIsMenuOpen(false)}
+        />
+      )}
+
+      <nav
+        id="primary-nav-drawer"
+        className={`side-nav-drawer${isMenuOpen ? ' side-nav-drawer-open' : ''}`}
+        aria-label="Primary"
+      >
+        <div className="side-nav-header">
+          <p className="eyebrow">Navigation</p>
+          {/* Keep CTA aligned with route guards: only staff can navigate to /donate. */}
+          {isStaff && (
+            <Link to="/donate" className="button nav-donate-button" onClick={() => setIsMenuOpen(false)}>
+              Donate Now
+            </Link>
+          )}
+        </div>
+        <ul className="side-nav-list">
+          {navigation.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                className={({ isActive }) => `nav-link${isActive ? ' nav-link-active' : ''}`}
+                end={item.to === '/'}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                {item.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
       <main id="main-content" className="container page-content" role="main">
         <Outlet />
