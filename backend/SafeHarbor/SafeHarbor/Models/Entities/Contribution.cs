@@ -9,7 +9,12 @@ public class Contribution : AuditableEntity
     public Guid? CampaignId { get; set; }
     public int ContributionTypeId { get; set; }
     public int StatusStateId { get; set; }
+    
     public decimal Amount { get; set; }
+    
+    // --- ADD THE NEW LINE HERE ---
+    public string Frequency { get; set; } = "One-time"; 
+    
     public DateTimeOffset ContributionDate { get; set; }
 
     public Donor? Donor { get; set; }
