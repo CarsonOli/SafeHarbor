@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
-using SafeHarbor.Models;
 using SafeHarbor.Services;
 using SafeHarbor.Models.Entities;
 
@@ -34,7 +33,7 @@ public sealed class AdminDonorsController(
     [HttpPost]
     public ActionResult<DonorAdminResponse> Create([FromBody] DonorCreateRequest request)
     {
-        var donor = new Donor
+        var donor = new SafeHarbor.Models.Entities.Donor
         {
             DisplayName = request.DisplayName,
             Email = request.Email,
@@ -84,7 +83,7 @@ public sealed class AdminDonorsController(
         return Ok(retentionRedactionService.ApplyRetentionPolicy(payload, "donor_summary_report"));
     }
 
-    private static DonorAdminResponse MapAdmin(Donor donor) =>
+    private static DonorAdminResponse MapAdmin(SafeHarbor.Models.Entities.Donor donor) =>
         new(
             donor.Id,
             donor.DisplayName,

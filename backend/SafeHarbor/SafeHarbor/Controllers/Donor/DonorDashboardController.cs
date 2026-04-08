@@ -52,7 +52,7 @@ public sealed class DonorDashboardController(
         if (donorResolution.ErrorResult is not null)
             return donorResolution.ErrorResult;
 
-        var donor = donorResolution.Donor!;
+        var donor = donorResolution.donor!;
 
         // Get all completed contributions for this donor.
         var donorContributions = store.Contributions
@@ -99,7 +99,7 @@ public sealed class DonorDashboardController(
         if (donorResolution.ErrorResult is not null)
             return donorResolution.ErrorResult;
 
-        var donor = donorResolution.Donor!;
+        var donor = donorResolution.donor!;
 
         // Resolve the campaign: use the requested campaign ID, or auto-assign to the active campaign.
         Guid? resolvedCampaignId = request.CampaignId;
@@ -143,7 +143,7 @@ public sealed class DonorDashboardController(
     /// Claim-based scoping is required to prevent horizontal data exposure where one donor could
     /// submit another donor's email address and read or mutate data outside their own account.
     /// </remarks>
-    private (DonorEntity? Donor, ActionResult? ErrorResult) TryResolveAuthenticatedDonor()
+    private (DonorEntity? donor, ActionResult? ErrorResult) TryResolveAuthenticatedDonor()
     {
         var email = User.FindFirstValue(ClaimTypes.Email)
             ?? User.FindFirstValue("emails")

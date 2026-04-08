@@ -18,7 +18,7 @@ public sealed class InMemoryDataStore
 
     // NOTE: Keep this collection empty so no synthetic financial records are mistaken for real donor data.
     // Seeding is done explicitly via DonorDashboardSeeder, not here.
-    public List<Donor> Donors { get; } = [];
+    public List<SafeHarbor.Models.Entities.Donor> Donors { get; } = [];
 
     /// <summary>Fundraising campaigns. Populated by DonorDashboardSeeder at startup.</summary>
     public List<Campaign> Campaigns { get; } = [];
