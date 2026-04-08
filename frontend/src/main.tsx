@@ -27,9 +27,21 @@ const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'impact', element: <ImpactDashboardPage /> },
       { path: 'login', element: <LoginPage /> },
-      { path: 'privacy', element: <PrivacyPage /> },
-      // Public donation page — accessible to visitors and logged-in users alike.
-      { path: 'donate', element: <DonatePage /> },
+      // ADR authorization matrix decision:
+      // keep /donor/dashboard isolated as donor-role-only, not general authenticated access.
+      {
+        path: 'donor',
+        element: <ProtectedRoute allowedRoles={['Donor']} />,
+        children: [{ path: 'dashboard', element: <YourDonationsPage /> }],
+      },
+      // All non-public/non-donor routes are restricted to staff roles.
+      {
+        element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
+        children: [
+          { path: 'privacy', element: <PrivacyPage /> },
+          { path: 'donate', element: <DonatePage /> },
+        ],
+      },
       {
         path: 'app',
         // Restrict /app/* to staff roles only. Donors are redirected to / if they try to visit staff routes.
@@ -46,17 +58,6 @@ const router = createBrowserRouter([
           },
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
           { path: 'reports', element: <ReportsAnalyticsPage /> },
-        ],
-      },
-
-      // Donor-only route tree.
-      // Uses allowedRoles={['Donor']} so only donors can access /donor/*.
-      // Staff visiting /donor/dashboard are redirected to /login.
-      {
-        path: 'donor',
-        element: <ProtectedRoute allowedRoles={['Donor']} />,
-        children: [
-          { path: 'dashboard', element: <YourDonationsPage /> },
         ],
       },
     ],
