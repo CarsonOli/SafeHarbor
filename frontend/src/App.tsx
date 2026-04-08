@@ -51,19 +51,25 @@ function App() {
 
       <header className="site-header" role="banner">
         <div className="container nav-container">
-          <div className="brand" aria-label="Safe Harbor">
-            Safe Harbor
-          </div>
-          <div className="header-actions">
+          <div className="header-brand-group">
             <button
               type="button"
               className="button button-secondary nav-menu-toggle"
               onClick={() => setIsMenuOpen((previous) => !previous)}
               aria-expanded={isMenuOpen}
               aria-controls="primary-nav-drawer"
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
             >
-              {isMenuOpen ? 'Close menu' : 'Open menu'}
+              <span className="nav-menu-icon" aria-hidden="true">
+                ☰
+              </span>
+              <span className="sr-only">{isMenuOpen ? 'Close menu' : 'Open menu'}</span>
             </button>
+            <div className="brand" aria-label="Safe Harbor">
+              Safe Harbor
+            </div>
+          </div>
+          <div className="header-actions">
             {session && (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})
