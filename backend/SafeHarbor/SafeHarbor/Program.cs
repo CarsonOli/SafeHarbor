@@ -10,6 +10,7 @@ using SafeHarbor.Data;
 using SafeHarbor.Infrastructure;
 using SafeHarbor.Services;
 using SafeHarbor.Services.DonorImpact;
+using SafeHarbor.Services.LocalAuth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,6 +88,7 @@ builder.Services.AddCors(options =>
 // Services Registration
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
+builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
 // TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.

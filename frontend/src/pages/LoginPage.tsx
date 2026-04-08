@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { roles, type AppRole } from '../auth/authSession'
-import { requestLocalDevelopmentToken } from '../services/localAuthApi'
+import { registerLocalDevelopmentAccount, requestLocalDevelopmentToken } from '../services/localAuthApi'
 
 type LocationState = { from?: { pathname?: string } } | null
 
@@ -65,8 +65,11 @@ export function LoginPage() {
   const location = useLocation()
   const { session, loginWithIdentityToken } = useAuth()
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [role, setRole] = useState<AppRole>('Admin')
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const locationState = location.state as LocationState
 
@@ -123,16 +126,29 @@ export function LoginPage() {
 
   const handleDevelopmentSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setError(null)
+    setStatusMessage(null)
 
     if (!email.trim()) {
       setError('Please enter your work email.')
       return
     }
+    if (!password.trim()) {
+      setError('Please enter your password.')
+      return
+    }
 
     try {
+      const normalizedEmail = email.trim()
+      if (isCreatingAccount) {
+        await registerLocalDevelopmentAccount({ email: normalizedEmail, role, password: password.trim() })
+        setStatusMessage('Account created. You can now sign in with the same credentials.')
+        setIsCreatingAccount(false)
+      }
+
       // Local auth mode returns a signed test token from the backend so local API
       // testing follows the same bearer-token path used in Azure.
-      const idToken = await requestLocalDevelopmentToken(email.trim(), role)
+      const idToken = await requestLocalDevelopmentToken(normalizedEmail, role, password.trim())
       const roleFromToken = loginWithIdentityToken(idToken)
       const destination = locationState?.from?.pathname
       navigate(destination ?? defaultDestinationForRole(roleFromToken), { replace: true })
@@ -152,6 +168,7 @@ export function LoginPage() {
             {error}
           </p>
         )}
+        {statusMessage && <p className="caption">{statusMessage}</p>}
 
         {!LOCAL_AUTH_MODE_ENABLED && (
           <button
@@ -178,6 +195,9 @@ export function LoginPage() {
                 ? ' (VITE_AUTH_MODE=local)'
                 : ' (enabled with VITE_ENABLE_DEV_ROLE_SIMULATION=true)'}
             </p>
+            <p className="caption">
+              Use seeded accounts like <strong>alice@example.com / Password123!</strong> or create your own account below.
+            </p>
 
             <form onSubmit={handleDevelopmentSubmit} className="auth-form">
               <label htmlFor="email">Work email</label>
@@ -187,6 +207,16 @@ export function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+              />
+
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
               />
 
               <label htmlFor="role">Role</label>
@@ -199,7 +229,10 @@ export function LoginPage() {
               </select>
 
               <button type="submit" className="button button-secondary">
-                Simulate sign-in
+                {isCreatingAccount ? 'Create account and sign in' : 'Sign in locally'}
+              </button>
+              <button type="button" className="button button-secondary" onClick={() => setIsCreatingAccount((current) => !current)}>
+                {isCreatingAccount ? 'Use existing account' : 'Create a new account'}
               </button>
             </form>
           </>

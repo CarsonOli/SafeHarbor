@@ -21,6 +21,18 @@ If you want full local end-to-end auth (without Entra tenant setup), use:
 
 In that mode, `/login` uses the backend local auth endpoint (`POST /api/auth/local-login`) to get a signed JWT for local testing. The backend switch is controlled by `LocalAuth:Enabled` in `backend/SafeHarbor/SafeHarbor/appsettings.Development.json`.
 
+### Local account workflow
+
+When `VITE_AUTH_MODE=local` is enabled, the login page now supports:
+
+- **Sign in locally** using an existing local account.
+- **Create a new account** (stored in backend memory only) and sign in immediately.
+
+Seeded local accounts are also available for quick smoke testing:
+
+- `alice@example.com` / `Password123!` (Donor)
+- `admin@safeharbor.local` / `Password123!` (Admin)
+
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

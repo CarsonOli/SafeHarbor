@@ -4,15 +4,36 @@ using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using SafeHarbor.Services.LocalAuth;
 
 namespace SafeHarbor.Controllers.Public;
 
 [ApiController]
 [Route("api/auth")]
 [AllowAnonymous]
-public sealed class LocalAuthController(IConfiguration configuration, IWebHostEnvironment environment) : ControllerBase
+public sealed class LocalAuthController(
+    IConfiguration configuration,
+    IWebHostEnvironment environment,
+    ILocalAccountStore localAccountStore) : ControllerBase
 {
-    private static readonly HashSet<string> AllowedRoles = ["Admin", "SocialWorker", "Donor"];
+    internal static readonly HashSet<string> AllowedRoles = ["Admin", "SocialWorker", "Donor"];
+
+    [HttpPost("local-register")]
+    public IActionResult LocalRegister([FromBody] LocalRegisterRequest request)
+    {
+        var localAuthEnabled = environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled");
+        if (!localAuthEnabled)
+        {
+            return NotFound(new { error = "Local authentication is disabled." });
+        }
+
+        if (!localAccountStore.TryCreateAccount(request, out var registerError))
+        {
+            return BadRequest(new { error = registerError });
+        }
+
+        return StatusCode(StatusCodes.Status201Created);
+    }
 
     [HttpPost("local-login")]
     public ActionResult<LocalLoginResponse> LocalLogin([FromBody] LocalLoginRequest request)
@@ -25,14 +46,9 @@ public sealed class LocalAuthController(IConfiguration configuration, IWebHostEn
             return NotFound(new { error = "Local authentication is disabled." });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email))
+        if (!localAccountStore.TryValidateCredentials(request, out var account, out var loginError))
         {
-            return BadRequest(new { error = "Email is required." });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Role) || !AllowedRoles.Contains(request.Role))
-        {
-            return BadRequest(new { error = "A supported role is required." });
+            return BadRequest(new { error = loginError });
         }
 
         var issuer = configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
@@ -46,11 +62,11 @@ public sealed class LocalAuthController(IConfiguration configuration, IWebHostEn
         var now = DateTime.UtcNow;
         var claims = new[]
         {
-            new Claim(ClaimTypes.Email, request.Email.Trim()),
-            new Claim("preferred_username", request.Email.Trim()),
-            new Claim(ClaimTypes.Role, request.Role),
-            new Claim("role", request.Role),
-            new Claim("sub", request.Email.Trim().ToLowerInvariant()),
+            new Claim(ClaimTypes.Email, account!.Email),
+            new Claim("preferred_username", account.Email),
+            new Claim(ClaimTypes.Role, account.Role),
+            new Claim("role", account.Role),
+            new Claim("sub", account.Email.ToLowerInvariant()),
         };
 
         var credentials = new SigningCredentials(
@@ -69,5 +85,6 @@ public sealed class LocalAuthController(IConfiguration configuration, IWebHostEn
     }
 }
 
-public sealed record LocalLoginRequest(string Email, string Role);
+public sealed record LocalLoginRequest(string Email, string Role, string Password);
+public sealed record LocalRegisterRequest(string Email, string Role, string Password);
 public sealed record LocalLoginResponse(string IdToken);
