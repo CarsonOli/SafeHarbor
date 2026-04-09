@@ -40,8 +40,10 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
   let hadNetworkFailure = false
 
   for (const baseUrl of baseCandidates) {
+    let response: Response
+
     try {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      response = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,17 +51,28 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
         },
         body: JSON.stringify(payload),
       })
-
-      if (response.status === 404 && baseUrl === '' && import.meta.env.DEV) {
-        // In local Vite development, a 404 on same-origin usually means "/api" hit the frontend
-        // server instead of the backend. Continue to explicit backend URL fallbacks.
-        continue
-      }
-
-      return response
     } catch {
       hadNetworkFailure = true
+      continue
     }
+
+    if (response.status === 404 && baseUrl === '' && import.meta.env.DEV) {
+      // In local Vite development, a 404 on same-origin usually means "/api" hit the frontend
+      // server instead of the backend. Continue to explicit backend URL fallbacks.
+      continue
+    }
+
+    if ((response.status === 404 || response.status === 405) && baseUrl === '' && !import.meta.env.DEV) {
+      // In deployed environments a relative "/api/*" call should only be used when the frontend host
+      // actually proxies API traffic. A 404/405 here usually means the request hit static hosting
+      // instead of the backend API, so include actionable guidance in the surfaced error.
+      throw new Error(
+        `Auth endpoint ${endpoint} is not reachable on this frontend origin (HTTP ${response.status}). ` +
+          'Set VITE_API_BASE_URL to the backend URL or configure frontend hosting to proxy /api/* to the API.'
+      )
+    }
+
+    return response
   }
 
   if (hadNetworkFailure) {
