@@ -99,12 +99,13 @@ public sealed class LocalAuthController(
             return BadRequest(new { error = "Requested role is not assigned to this account." });
         }
 
-        var issuer = configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
-        var audience = configuration["LocalAuth:Audience"] ?? "safeharbor-local-client";
-        var signingKey = configuration["LocalAuth:SigningKey"];
+        var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+        var issuer = jwtOptions.Issuer ?? "safeharbor-local";
+        var audience = jwtOptions.Audience ?? "safeharbor-local-client";
+        var signingKey = jwtOptions.SigningKey;
         if (string.IsNullOrWhiteSpace(signingKey))
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Local auth signing key is missing." });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "JWT signing key is missing." });
         }
 
         var now = DateTime.UtcNow;
@@ -126,12 +127,14 @@ public sealed class LocalAuthController(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
             SecurityAlgorithms.HmacSha256);
 
+        var tokenLifetimeMinutes = jwtOptions.TokenLifetimeMinutes > 0 ? jwtOptions.TokenLifetimeMinutes : 480;
+
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
             claims: claims,
             notBefore: now,
-            expires: now.AddHours(8),
+            expires: now.AddMinutes(tokenLifetimeMinutes),
             signingCredentials: credentials);
 
         return Ok(new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token)));
