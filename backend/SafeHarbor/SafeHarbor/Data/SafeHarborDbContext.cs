@@ -1,26 +1,19 @@
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using SafeHarbor.Auth;
 using SafeHarbor.Models.Entities;
 using SafeHarbor.Models.Lookups;
-using SafeHarbor.Models;
 
 namespace SafeHarbor.Data
 {
-    public class SafeHarborDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
+    public class SafeHarborDbContext : DbContext
     {
         public SafeHarborDbContext(DbContextOptions<SafeHarborDbContext> options)
             : base(options)
         {
         }
 
-        // --- Identity & Roles (Aligned with Instructions) ---
-        public DbSet<UserProfile> UserProfiles { get; set; } 
-        // NOTE: These shadow IdentityDbContext's Role/UserRole sets because we map to app-specific entities.
-        public new DbSet<Role> Roles { get; set; }          
-        public new DbSet<UserRole> UserRoles { get; set; }
-        public DbSet<StatusState> StatusState { get; set; } 
+        public DbSet<User> Users { get; set; }
+        public DbSet<UserProfile> UserProfiles { get; set; }
+        public DbSet<StatusState> StatusState { get; set; }
 
         // --- The Rest of the 17 ---
         public DbSet<Resident> Residents { get; set; }
@@ -33,7 +26,7 @@ namespace SafeHarbor.Data
         public DbSet<Safehouse> Safehouses { get; set; }
 
         // --- Fundraising ---
-        public DbSet<Donor> Donors { get; set; } 
+        public DbSet<Donor> Donors { get; set; }
         public DbSet<Campaign> Campaigns { get; set; }
         public DbSet<Contribution> Contributions { get; set; }
         public DbSet<ContributionAllocation> ContributionAllocations { get; set; }
@@ -41,7 +34,22 @@ namespace SafeHarbor.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(modelBuilder);
+            // Keep user auth data mapped to the existing Postgres table/column names.
+            // We scope the explicit schema mapping to this entity so existing table mappings stay unchanged.
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.ToTable("users", "lighthouse");
+                entity.HasKey(u => u.UserId);
+
+                entity.Property(u => u.UserId).HasColumnName("user_id");
+                entity.Property(u => u.FirstName).HasColumnName("f_name");
+                entity.Property(u => u.LastName).HasColumnName("l_name");
+                entity.Property(u => u.Email).HasColumnName("email");
+                entity.Property(u => u.Role).HasColumnName("role");
+                entity.Property(u => u.PasswordHash).HasColumnName("password_hash");
+                entity.Property(u => u.CreatedAt).HasColumnName("created_at");
+                entity.Property(u => u.UpdatedAt).HasColumnName("updated_at");
+            });
 
             // 1. Fix Decimal Precision (Stops the truncation warnings)
             modelBuilder.Entity<Contribution>()
@@ -55,22 +63,18 @@ namespace SafeHarbor.Data
             modelBuilder.Entity<SocialPostMetric>()
                 .Property(s => s.AttributedDonationAmount)
                 .HasPrecision(18, 2);
-            
+
             // This line stops the warning you saw in your logs earlier:
             modelBuilder.Entity<ContributionAllocation>()
                 .Property(ca => ca.AmountAllocated)
                 .HasPrecision(18, 2);
 
-            // 2. Composite Key for UserRole
-            modelBuilder.Entity<UserRole>()
-                .HasKey(sr => new { sr.UserProfileId, sr.RoleId });
-            
             // 3. Resolve the SQL Server Cascade Path Error
             modelBuilder.Entity<CaseConference>()
-                .HasOne(cc => cc.StatusState) 
+                .HasOne(cc => cc.StatusState)
                 .WithMany()
                 .HasForeignKey(cc => cc.StatusStateId)
-                .OnDelete(DeleteBehavior.NoAction); 
+                .OnDelete(DeleteBehavior.NoAction);
 
             // Fix for the new error on HomeVisits
             modelBuilder.Entity<HomeVisit>()
@@ -92,17 +96,6 @@ namespace SafeHarbor.Data
                 .WithMany()
                 .HasForeignKey(ra => ra.StatusStateId)
                 .OnDelete(DeleteBehavior.NoAction);
-            
-            modelBuilder.Entity<Role>().HasData(
-                new Role { 
-                    Id = Guid.Parse("d2b2f671-5b1a-4a2b-8c2e-4b6a8f1d2c34"), 
-                    Name = "Admin" 
-                },
-                new Role { 
-                    Id = Guid.Parse("a1c3e5d7-2f4b-4e6a-8d0c-2b4a6f8d0e2c"), 
-                    Name = "Staff" 
-                }
-            );
 
             modelBuilder.Entity<StatusState>().HasData(
                 new StatusState { Id = 1, Name = "Active" },
