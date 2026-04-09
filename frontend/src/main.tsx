@@ -17,7 +17,9 @@ import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
-import AdminContributionsPage from './pages/app/AdminContributionsPage';
+import AdminContributionsPage from './pages/app/AdminContributionsPage'
+import SocialMediaStrategy from './pages/SocialMediaStrategy';
+
 
 export const appRoutes = [
   {
@@ -57,6 +59,7 @@ export const appRoutes = [
           },
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
           { path: 'reports', element: <ReportsAnalyticsPage /> },
+          { path: 'social-media', element: <SocialMediaStrategy /> },
         ],
       },
     ],
