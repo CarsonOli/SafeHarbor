@@ -21,7 +21,7 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         return connection;
     }
 
-    public bool TryCreateAccount(LocalRegisterRequest request, out string? error)
+    public bool TryCreateAccount(RegisterRequest request, out string? error)
     {
         error = ValidateRequest(request.Email, request.Role, request.Password);
         if (error is not null) return false;
@@ -47,7 +47,7 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         }
     }
 
-    public bool TryValidateCredentials(LocalLoginRequest request, out LocalAccountRecord? account, out string? error)
+    public bool TryValidateCredentials(LoginRequest request, out LocalAccountRecord? account, out string? error)
     {
         account = null;
         error = ValidateRequest(request.Email, request.Role, request.Password);
