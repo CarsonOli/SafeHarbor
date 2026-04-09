@@ -148,13 +148,14 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseCors(); // Must be first — adds CORS headers to ALL responses including OPTIONS preflight
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
-app.UseCors();
 //app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
