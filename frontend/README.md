@@ -20,6 +20,11 @@ For deployed environments, either set `VITE_API_BASE_URL` to your backend API ho
 `/api/*` requests. Without one of those, auth requests can land on the frontend host and return `404/405` instead of reaching
 the API.
 
+As a safety net for Azure Static Web Apps deployments, local auth also falls back to known backend App Service hosts
+when no `VITE_API_BASE_URL` is provided and same-origin `/api/*` returns `404/405`, including
+`https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net`.
+Set `VITE_API_BASE_URL` in CI/CD to the correct backend host for each environment.
+
 Seeded local accounts are available for smoke testing:
 
 - `alice@example.com` / `Password123!` (Donor)

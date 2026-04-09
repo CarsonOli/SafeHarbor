@@ -2,6 +2,10 @@ import { mapAppRoleToDatabaseRole, type AppRole } from '../auth/authSession'
 
 const LOGIN_ENDPOINT = '/api/auth/login'
 const LOCAL_REGISTER_ENDPOINT = '/api/auth/register'
+const STATIC_WEB_APP_FALLBACK_API_HOSTS = [
+  'https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net',
+  'https://safeharbor-api-staging.azurewebsites.net',
+]
 
 type LocalLoginResponse = {
   idToken: string
@@ -25,6 +29,13 @@ function resolveApiBaseCandidates(): string[] {
     // Prefer :7217 first to avoid HTTP->HTTPS redirect preflight issues in browsers.
     // Keep :5264 as a secondary fallback for devs who disable TLS locally.
     return ['', 'https://localhost:7217', 'http://localhost:5264', 'http://localhost:5000']
+  }
+
+  // In deployed Azure Static Web Apps, frontend and backend may live on separate hosts.
+  // Keep same-origin first for environments with an API proxy, then fall back to known
+  // App Service hosts so auth flows still work when proxy wiring/env config is absent.
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')) {
+    return ['', ...STATIC_WEB_APP_FALLBACK_API_HOSTS]
   }
 
   return ['']
@@ -63,6 +74,11 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
     }
 
     if ((response.status === 404 || response.status === 405) && baseUrl === '' && !import.meta.env.DEV) {
+      if (baseCandidates.length > 1) {
+        // Preserve compatibility with environments that provide a secondary API host fallback.
+        continue
+      }
+
       // In deployed environments a relative "/api/*" call should only be used when the frontend host
       // actually proxies API traffic. A 404/405 here usually means the request hit static hosting
       // instead of the backend API, so include actionable guidance in the surfaced error.
