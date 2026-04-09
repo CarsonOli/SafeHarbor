@@ -1,7 +1,7 @@
 import type { AppRole } from '../auth/authSession'
 
-const LOCAL_LOGIN_ENDPOINT = '/api/auth/local-login'
-const LOCAL_REGISTER_ENDPOINT = '/api/auth/local-register'
+const LOGIN_ENDPOINT = '/api/auth/login'
+const LOCAL_REGISTER_ENDPOINT = '/api/auth/register'
 
 type LocalLoginResponse = {
   idToken: string
@@ -73,11 +73,11 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
 }
 
 /**
- * Development-only helper that exchanges an email+role selection for a signed JWT
- * from the backend. This lets local testing exercise real bearer-token plumbing.
+ * Exchanges email/password credentials for a signed JWT
+ * from the backend. This keeps frontend auth storage aligned with backend token issuance.
  */
-export async function requestLocalDevelopmentToken(email: string, role: AppRole, password: string): Promise<string> {
-  const response = await postLocalAuthJson(LOCAL_LOGIN_ENDPOINT, { email, role, password })
+export async function requestLocalDevelopmentToken(email: string, password: string): Promise<string> {
+  const response = await postLocalAuthJson(LOGIN_ENDPOINT, { email, password })
 
   if (!response.ok) {
     throw await readApiError(response, `Local login failed with status ${response.status}`)
@@ -88,7 +88,7 @@ export async function requestLocalDevelopmentToken(email: string, role: AppRole,
 }
 
 /**
- * Creates a local-development account that can later request JWTs via /local-login.
+ * Creates a local-development account that can later request JWTs via /api/auth/login.
  * The backend stores accounts in-memory only, so this is intentionally local and ephemeral.
  */
 export async function registerLocalDevelopmentAccount(request: LocalRegisterRequest): Promise<void> {

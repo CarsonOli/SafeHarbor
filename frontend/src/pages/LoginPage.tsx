@@ -1,132 +1,30 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { roles, type AppRole } from '../auth/authSession'
-import { registerLocalDevelopmentAccount, requestLocalDevelopmentToken } from '../services/localAuthApi'
+import { requestLocalDevelopmentToken } from '../services/localAuthApi'
 
 type LocationState = { from?: { pathname?: string } } | null
-
-type IdentityProviderState = {
-  fromPath?: string
-}
-
-const IDENTITY_PROVIDER_CONFIGURED =
-  Boolean(import.meta.env.VITE_AUTH_AUTHORIZE_URL) && Boolean(import.meta.env.VITE_AUTH_CLIENT_ID)
-
-const AUTH_MODE = import.meta.env.VITE_AUTH_MODE ?? 'idp'
-const LOCAL_AUTH_MODE_ENABLED = AUTH_MODE === 'local'
-const DEV_ROLE_SIMULATION_ENABLED =
-  import.meta.env.VITE_ENABLE_DEV_ROLE_SIMULATION === 'true' ||
-  (!IDENTITY_PROVIDER_CONFIGURED && LOCAL_AUTH_MODE_ENABLED)
-
-function defaultDestinationForRole(role: AppRole): string {
-  return role === 'Donor' ? '/donor/dashboard' : '/app/dashboard'
-}
-
-function decodeProviderState(encodedState: string | null): IdentityProviderState {
-  if (!encodedState) {
-    return {}
-  }
-
-  try {
-    return JSON.parse(window.atob(encodedState)) as IdentityProviderState
-  } catch {
-    return {}
-  }
-}
-
-function buildIdentityProviderAuthorizeUrl(fromPath?: string): string {
-  const authorizeEndpoint = import.meta.env.VITE_AUTH_AUTHORIZE_URL
-  const clientId = import.meta.env.VITE_AUTH_CLIENT_ID
-  const redirectUri = import.meta.env.VITE_AUTH_REDIRECT_URI ?? `${window.location.origin}/login`
-  const scope = import.meta.env.VITE_AUTH_SCOPE ?? 'openid profile email'
-
-  if (!authorizeEndpoint || !clientId) {
-    throw new Error(
-      'Identity provider settings are missing. Add VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID to frontend/.env.local.'
-    )
-  }
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: 'id_token',
-    redirect_uri: redirectUri,
-    scope,
-    response_mode: 'fragment',
-    state: window.btoa(JSON.stringify({ fromPath })),
-  })
-
-  return `${authorizeEndpoint}?${params.toString()}`
-}
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { session, loginWithIdentityToken } = useAuth()
+  const { session, loginWithToken } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<AppRole>('Admin')
-  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const locationState = location.state as LocationState
 
   useEffect(() => {
     if (session) {
       const destination = locationState?.from?.pathname
-      navigate(destination ?? defaultDestinationForRole(session.role), { replace: true })
+      navigate(destination ?? '/app/dashboard', { replace: true })
     }
   }, [locationState, navigate, session])
 
-  useEffect(() => {
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const idToken = hashParams.get('id_token')
-    const authError = hashParams.get('error_description') ?? hashParams.get('error')
-
-    if (!idToken && !authError) {
-      return
-    }
-
-    if (authError) {
-      setError(authError)
-      return
-    }
-    if (!idToken) {
-      return
-    }
-
-    try {
-      const roleFromToken = loginWithIdentityToken(idToken)
-      const providerState = decodeProviderState(hashParams.get('state'))
-      const destination = locationState?.from?.pathname ?? providerState.fromPath
-      window.history.replaceState(null, document.title, window.location.pathname + window.location.search)
-      navigate(destination ?? defaultDestinationForRole(roleFromToken), { replace: true })
-    } catch (authException) {
-      setError(authException instanceof Error ? authException.message : 'Unable to sign in with identity provider.')
-    }
-  }, [locationState, loginWithIdentityToken, navigate])
-
-  const handleIdentityProviderSignIn = () => {
-    setError(null)
-
-    if (!IDENTITY_PROVIDER_CONFIGURED) {
-      setError('Identity provider settings are missing. Configure frontend/.env.local or use Local development sign-in below.')
-      return
-    }
-
-    try {
-      const fromPath = locationState?.from?.pathname
-      window.location.assign(buildIdentityProviderAuthorizeUrl(fromPath))
-    } catch (authException) {
-      setError(authException instanceof Error ? authException.message : 'Unable to start identity provider sign-in.')
-    }
-  }
-
-  const handleDevelopmentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
-    setStatusMessage(null)
 
     if (!email.trim()) {
       setError('Please enter your work email.')
@@ -139,20 +37,14 @@ export function LoginPage() {
 
     try {
       const normalizedEmail = email.trim()
-      if (isCreatingAccount) {
-        await registerLocalDevelopmentAccount({ email: normalizedEmail, role, password: password.trim() })
-        setStatusMessage('Account created. You can now sign in with the same credentials.')
-        setIsCreatingAccount(false)
-      }
-
-      // Local auth mode returns a signed test token from the backend so local API
-      // testing follows the same bearer-token path used in Azure.
-      const idToken = await requestLocalDevelopmentToken(normalizedEmail, role, password.trim())
-      const roleFromToken = loginWithIdentityToken(idToken)
+      // Keep frontend login behavior on backend-issued JWTs so browser routing and
+      // API authorization both rely on the same token source.
+      const idToken = await requestLocalDevelopmentToken(normalizedEmail, password.trim())
+      const roleFromToken = loginWithToken(idToken)
       const destination = locationState?.from?.pathname
-      navigate(destination ?? defaultDestinationForRole(roleFromToken), { replace: true })
+      navigate(destination ?? (roleFromToken === 'Donor' ? '/donor/dashboard' : '/app/dashboard'), { replace: true })
     } catch (authException) {
-      setError(authException instanceof Error ? authException.message : 'Unable to complete local development sign-in.')
+      setError(authException instanceof Error ? authException.message : 'Unable to sign in.')
     }
   }
 
@@ -160,82 +52,38 @@ export function LoginPage() {
     <section aria-labelledby="login-title" className="auth-layout">
       <div className="auth-card">
         <h1 id="login-title">Sign in</h1>
-        <p className="caption">Use your organization identity-provider account to continue.</p>
+        <p className="caption">Use your Safe Harbor email and password to continue.</p>
 
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
         )}
-        {statusMessage && <p className="caption">{statusMessage}</p>}
 
-        {!LOCAL_AUTH_MODE_ENABLED && (
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={handleIdentityProviderSignIn}
-            disabled={!IDENTITY_PROVIDER_CONFIGURED}
-            title={!IDENTITY_PROVIDER_CONFIGURED ? 'Set VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID in frontend/.env.local.' : undefined}
-          >
-            Sign in with Identity Provider
+        <form onSubmit={handleSubmit} className="auth-form">
+          <label htmlFor="email">Work email</label>
+          <input
+            id="email"
+            name="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
+          <button type="submit" className="button button-primary">
+            Sign in
           </button>
-        )}
-
-        {(DEV_ROLE_SIMULATION_ENABLED || LOCAL_AUTH_MODE_ENABLED) && (
-          <>
-            {/*
-              Local-only sign-in exists to unblock route testing when
-              an external identity provider tenant is unavailable in offline/local environments.
-            */}
-            <hr aria-hidden="true" />
-            <p className="caption">
-              Local development sign-in
-              {LOCAL_AUTH_MODE_ENABLED
-                ? ' (VITE_AUTH_MODE=local)'
-                : ' (enabled with VITE_ENABLE_DEV_ROLE_SIMULATION=true)'}
-            </p>
-            <p className="caption">
-              Use seeded accounts like <strong>alice@example.com / Password123!</strong> or create your own account below.
-            </p>
-
-            <form onSubmit={handleDevelopmentSubmit} className="auth-form">
-              <label htmlFor="email">Work email</label>
-              <input
-                id="email"
-                name="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-
-              <label htmlFor="role">Role</label>
-              <select id="role" value={role} onChange={(event) => setRole(event.target.value as AppRole)}>
-                {roles.map((roleOption) => (
-                  <option key={roleOption} value={roleOption}>
-                    {roleOption}
-                  </option>
-                ))}
-              </select>
-
-              <button type="submit" className="button button-secondary">
-                {isCreatingAccount ? 'Create account and sign in' : 'Sign in locally'}
-              </button>
-              <button type="button" className="button button-secondary" onClick={() => setIsCreatingAccount((current) => !current)}>
-                {isCreatingAccount ? 'Use existing account' : 'Create a new account'}
-              </button>
-            </form>
-          </>
-        )}
+        </form>
       </div>
     </section>
   )
