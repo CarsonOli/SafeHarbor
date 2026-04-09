@@ -98,7 +98,14 @@ builder.Services.AddCors(options =>
 // Services Registration
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
-builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
+if (builder.Configuration.GetValue<bool>("LocalAuth:AllowInProduction"))
+{
+    builder.Services.AddScoped<ILocalAccountStore, PostgresLocalAccountStore>();
+}
+else
+{
+    builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
+}
 builder.Services.AddSingleton<InMemoryDataStore>();
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
