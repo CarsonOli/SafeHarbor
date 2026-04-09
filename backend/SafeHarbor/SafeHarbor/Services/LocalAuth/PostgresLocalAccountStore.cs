@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Npgsql;
-using SafeHarbor.Controllers.Public;
+using SafeHarbor.Services.Auth;
 
 namespace SafeHarbor.Services.LocalAuth;
 
@@ -21,7 +21,9 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         return connection;
     }
 
-    public bool TryCreateAccount(LocalRegisterRequest request, out string? error)
+    // NOTE: This class persists auth accounts directly for local auth workflows.
+    // It consumes the shared auth DTOs to avoid coupling to controller-local request types.
+    public bool TryCreateAccount(RegisterAuthRequest request, out string? error)
     {
         error = ValidateRequest(request.Email, request.Role, request.Password);
         if (error is not null) return false;
@@ -47,7 +49,7 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         }
     }
 
-    public bool TryValidateCredentials(LocalLoginRequest request, out LocalAccountRecord? account, out string? error)
+    public bool TryValidateCredentials(LoginAuthRequest request, out LocalAccountRecord? account, out string? error)
     {
         account = null;
         error = ValidateRequest(request.Email, request.Role, request.Password);

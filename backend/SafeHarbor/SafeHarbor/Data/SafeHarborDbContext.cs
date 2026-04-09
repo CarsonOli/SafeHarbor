@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SafeHarbor.Models;
 using SafeHarbor.Models.Entities;
 using SafeHarbor.Models.Lookups;
 
