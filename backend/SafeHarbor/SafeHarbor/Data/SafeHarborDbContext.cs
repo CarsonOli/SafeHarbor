@@ -1,11 +1,14 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using SafeHarbor.Auth;
 using SafeHarbor.Models.Entities;
 using SafeHarbor.Models.Lookups;
 using SafeHarbor.Models;
 
 namespace SafeHarbor.Data
 {
-    public class SafeHarborDbContext : DbContext
+    public class SafeHarborDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
         public SafeHarborDbContext(DbContextOptions<SafeHarborDbContext> options)
             : base(options)
@@ -14,8 +17,9 @@ namespace SafeHarbor.Data
 
         // --- Identity & Roles (Aligned with Instructions) ---
         public DbSet<UserProfile> UserProfiles { get; set; } 
-        public DbSet<Role> Roles { get; set; }          
-        public DbSet<UserRole> UserRoles { get; set; }
+        // NOTE: These shadow IdentityDbContext's Role/UserRole sets because we map to app-specific entities.
+        public new DbSet<Role> Roles { get; set; }          
+        public new DbSet<UserRole> UserRoles { get; set; }
         public DbSet<StatusState> StatusState { get; set; } 
 
         // --- The Rest of the 17 ---
@@ -32,6 +36,7 @@ namespace SafeHarbor.Data
         public DbSet<Donor> Donors { get; set; } 
         public DbSet<Campaign> Campaigns { get; set; }
         public DbSet<Contribution> Contributions { get; set; }
+        public DbSet<ContributionAllocation> ContributionAllocations { get; set; }
         public DbSet<SocialPostMetric> SocialPostMetrics { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

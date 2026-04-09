@@ -2,36 +2,49 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
+using SafeHarbor.Services.Admin;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/caseload")]
 [Authorize(Policy = PolicyNames.StaffOrAdmin)]
-public sealed class CaseloadInventoryController : ControllerBase
+public sealed class CaseloadInventoryController(ICaseloadInventoryService caseloadService) : ControllerBase
 {
     [HttpGet("residents")]
-    public ActionResult<PagedResult<ResidentCaseListItem>> GetResidents([FromQuery] PagingQuery query)
+    public async Task<ActionResult<PagedResult<ResidentCaseListItem>>> GetResidents([FromQuery] PagingQuery query, CancellationToken ct)
     {
-        // TODO: Hydrate this list from ICaseManagementStore after database integration lands.
-        return Ok(new PagedResult<ResidentCaseListItem>(Array.Empty<ResidentCaseListItem>(), query.NormalizedPage, query.NormalizedPageSize, 0));
+        return Ok(await caseloadService.GetResidentsAsync(query, ct));
     }
 
     [HttpPost("residents")]
-    public ActionResult<ResidentCaseListItem> CreateResidentCase([FromBody] CreateResidentCaseRequest _)
+    public async Task<ActionResult<ResidentCaseListItem>> CreateResidentCase([FromBody] CreateResidentCaseRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, "Resident case writes require database integration.");
+        var created = await caseloadService.CreateResidentCaseAsync(request, ct);
+        return CreatedAtAction(nameof(GetResidents), new { id = created.Id }, created);
     }
 
     [HttpPut("residents/{id:guid}")]
-    public ActionResult<ResidentCaseListItem> UpdateResidentCase(Guid id, [FromBody] UpdateResidentCaseRequest _)
+    public async Task<ActionResult<ResidentCaseListItem>> UpdateResidentCase(Guid id, [FromBody] UpdateResidentCaseRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, $"Resident case {id} cannot be updated until database integration is complete.");
+        var updated = await caseloadService.UpdateResidentCaseAsync(id, request, ct);
+        if (updated is null)
+        {
+            return NotFound(new ApiErrorEnvelope("NotFound", $"Resident case {id} was not found.", HttpContext.TraceIdentifier));
+        }
+
+        return Ok(updated);
     }
 
     [HttpDelete("residents/{id:guid}")]
-    public IActionResult DeleteResidentCase(Guid id)
+    public async Task<IActionResult> DeleteResidentCase(Guid id, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, $"Resident case {id} cannot be deleted until database integration is complete.");
+        var deleted = await caseloadService.DeleteResidentCaseAsync(id, ct);
+        if (!deleted)
+        {
+            return NotFound(new ApiErrorEnvelope("NotFound", $"Resident case {id} was not found.", HttpContext.TraceIdentifier));
+        }
+
+        return NoContent();
     }
 }

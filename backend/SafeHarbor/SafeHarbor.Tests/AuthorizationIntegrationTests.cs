@@ -40,17 +40,22 @@ public sealed class AuthorizationIntegrationTests : IClassFixture<SafeHarborApiF
         Assert.Equal(HttpStatusCode.Forbidden, donorResponse.StatusCode);
     }
 
-    [Fact]
-    public async Task DonorEndpoints_RequireAuthentication_AndAllowAuthenticatedDonorIdentityScoping()
+    [Theory]
+    [InlineData("/api/donor/dashboard", "GET")]
+    [InlineData("/api/donor/contribution", "POST")]
+    public async Task DonorPersonalEndpoints_AllowDonor_AndForbidAdminOrSocialWorker(string endpoint, string method)
     {
         using var donorClient = CreateAuthenticatedClient(role: "Donor", email: "alice@example.com");
+        using var adminClient = CreateAuthenticatedClient(role: "Admin", email: "admin@safeharbor.org");
         using var staffClient = CreateAuthenticatedClient(role: "SocialWorker", email: "alice@example.com");
 
-        var donorResponse = await donorClient.GetAsync("/api/donor/dashboard");
-        var staffResponse = await staffClient.GetAsync("/api/donor/dashboard");
+        var donorResponse = await SendDonorRequestAsync(donorClient, endpoint, method);
+        var adminResponse = await SendDonorRequestAsync(adminClient, endpoint, method);
+        var staffResponse = await SendDonorRequestAsync(staffClient, endpoint, method);
 
         Assert.Equal(HttpStatusCode.OK, donorResponse.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, staffResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, adminResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, staffResponse.StatusCode);
     }
 
     [Fact]
@@ -88,6 +93,19 @@ public sealed class AuthorizationIntegrationTests : IClassFixture<SafeHarborApiF
         }
 
         return client;
+    }
+
+    private static Task<HttpResponseMessage> SendDonorRequestAsync(HttpClient client, string endpoint, string method)
+    {
+        // Keep donor endpoint authorization tests focused on policy behavior:
+        // POST sends the minimum valid payload so non-donor callers fail at authorization
+        // rather than downstream request validation.
+        if (string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
+        {
+            return client.PostAsJsonAsync(endpoint, new { amount = 50m });
+        }
+
+        return client.GetAsync(endpoint);
     }
 
     private sealed record DonorDashboardEnvelope(string DonorName);

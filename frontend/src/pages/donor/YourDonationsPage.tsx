@@ -90,7 +90,7 @@ export function YourDonationsPage() {
     setDonationMessage(null)
 
     try {
-      const message = await submitDonation(session.email, amount)
+      const message = await submitDonation(session.email, amount, 'One-time')
       setDonationStatus('success')
       setDonationMessage(message)
       // Reset the form.

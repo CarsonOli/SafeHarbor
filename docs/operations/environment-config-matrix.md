@@ -3,7 +3,8 @@
 | Setting | Local Dev | CI | Staging | Production | Notes |
 |---|---|---|---|---|---|
 | `ASPNETCORE_ENVIRONMENT` | `Development` | `CI` | `Staging` | `Production` | Drives ASP.NET behavior. |
-| `ConnectionStrings__SafeHarborDb` | Local SQLite/PostgreSQL | Ephemeral DB or SQLite | Azure PostgreSQL staging | Azure PostgreSQL prod | Never commit credentials. |
+| `ConnectionStrings__DefaultConnection` | Local PostgreSQL | Ephemeral PostgreSQL | Azure PostgreSQL staging | Azure PostgreSQL prod | Default API connection string key used by EF Core. |
+| `DevelopmentFeatures__UseInMemoryDataStore` | Optional (`false` by default) | `false` | `false` | `false` | Dev-only fallback; ignored outside `Development`. |
 | `AzureAd__Instance` | Optional/local | Mock or disabled | Required | Required | Entra tenant authority URL. |
 | `AzureAd__TenantId` | Optional/local | Secret | Secret | Secret | Identity tenant id. |
 | `AzureAd__ClientId` | Optional/local | Secret | Secret | Secret | API app registration id. |
@@ -18,4 +19,3 @@
 - Any new production setting must be added to this matrix in the same pull request.
 - Secrets are stored in Azure/GitHub environments, never in repo files.
 - Staging values should mirror production shape (not necessarily scale) to reduce deployment drift.
-

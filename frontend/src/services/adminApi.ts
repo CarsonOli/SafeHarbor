@@ -9,7 +9,7 @@ export const adminApi = {
     return response.json();
   }, // <--- THIS COMMA IS CRITICAL
 
-  updateContribution: async (id: string, data: any) => {
+  updateContribution: async (id: string, data: Record<string, unknown>) => {
     return fetch(`${API_BASE}/api/admin/contributions/${id}`, {
       method: 'PUT',
       headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),

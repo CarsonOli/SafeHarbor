@@ -1,4 +1,3 @@
-import React from 'react';
 import AdminContributionTable from '../../components/AdminContributionTable';
 
 const AdminContributionsPage = () => {

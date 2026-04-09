@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminApi } from '../services/adminApi';
 
 const AdminContributionTable = () => {
-  const [contributions, setContributions] = useState([]);
+  const [contributions, setContributions] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     loadData();
@@ -14,26 +14,27 @@ const AdminContributionTable = () => {
     try {
       const data = await adminApi.getContributions();
       setContributions(data);
-    } catch (err) {
-      console.error("Failed to load contributions", err);
+    } catch (error) {
+      console.error("Failed to load contributions", error);
     } finally {
       setLoading(false);
     }
   };
 
   const saveEdit = async () => {
+    if (!editingItem) return;
     try {
       // Ensure amount is a number before sending to .NET
-      const updatedData = { 
-        ...editingItem, 
-        amount: parseFloat(editingItem.amount) 
+      const updatedData = {
+        ...editingItem,
+        amount: parseFloat(editingItem['amount'] as string)
       };
-      
-      await adminApi.updateContribution(editingItem.id, updatedData);
+
+      await adminApi.updateContribution(editingItem['id'] as string, updatedData);
       setEditingItem(null);
       await loadData(); // Await the reload for a smoother UI
       alert("Contribution updated successfully!");
-    } catch (err) {
+    } catch {
       alert("Update failed. Check if the backend is running.");
     }
   };
@@ -42,8 +43,8 @@ const AdminContributionTable = () => {
     if (window.confirm("Are you sure? This will permanently remove this record from SafeHarbor logs.")) {
       try {
         await adminApi.deleteContribution(id);
-        setContributions(prev => prev.filter((c: any) => c.id !== id));
-      } catch (err) {
+        setContributions(prev => prev.filter((c) => c['id'] !== id));
+      } catch {
         alert("Error deleting record.");
       }
     }
@@ -63,14 +64,14 @@ const AdminContributionTable = () => {
             <input 
               type="number" 
               step="0.01" // Allows for cents
-              value={editingItem.amount} 
-              onChange={(e) => setEditingItem({...editingItem, amount: e.target.value})} 
+              value={editingItem['amount'] as string}
+              onChange={(e) => setEditingItem({...editingItem, amount: e.target.value})}
             />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label>Frequency: </label>
             <select 
-              value={editingItem.frequency} 
+              value={editingItem['frequency'] as string}
               onChange={(e) => setEditingItem({...editingItem, frequency: e.target.value})}
             >
               <option value="One-time">One-time</option>
@@ -93,18 +94,17 @@ const AdminContributionTable = () => {
           </tr>
         </thead>
         <tbody>
-          {contributions.map((c: any) => (
-            <tr key={c.id} style={{ borderBottom: '1px solid #eee' }}>
-              {/* Note: Use c.donor?.email if the backend nests the donor object */}
-              <td>{c.donorEmail || c.donor?.email || 'Unknown'}</td>
-              <td>${Number(c.amount).toFixed(2)}</td>
-              <td>{c.frequency}</td> 
-              <td>{new Date(c.contributionDate).toLocaleDateString()}</td>
+          {contributions.map((c) => (
+            <tr key={c['id'] as string} style={{ borderBottom: '1px solid #eee' }}>
+              <td>{(c['donorEmail'] || c['donor_email'] || 'Unknown') as string}</td>
+              <td>${Number(c['amount']).toFixed(2)}</td>
+              <td>{c['frequency'] as string}</td>
+              <td>{new Date(c['contributionDate'] as string).toLocaleDateString()}</td>
               <td style={{ padding: '10px 0' }}>
                 <button onClick={() => setEditingItem(c)} style={{ marginRight: '8px' }}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(c.id)} className="delete-btn" style={{ color: 'red' }}>
+                <button onClick={() => handleDelete(c['id'] as string)} className="delete-btn" style={{ color: 'red' }}>
                   Delete
                 </button>
               </td>

@@ -10,8 +10,8 @@ public static class PolicyNames
     /// <summary>
     /// Policy for donor-facing endpoints.
     /// Only users with the "Donor" role may access routes guarded by this policy.
-    /// TODO: Enforce this with [Authorize(Policy = PolicyNames.DonorOnly)] in DonorDashboardController
-    ///       once Microsoft Entra ID authentication is wired. Currently [AllowAnonymous] is used.
+    /// This policy is applied to DonorDashboardController so identity scoping logic runs only
+    /// after role-based access has already constrained callers to donor principals.
     /// </summary>
     public const string DonorOnly = "DonorOnly";
 }

@@ -1,0 +1,68 @@
+export type PagedResult<T> = {
+  items: T[]
+  page: number
+  pageSize: number
+  totalCount: number
+}
+
+export type PagingQuery = {
+  page: number
+  pageSize: number
+  search?: string
+  desc?: boolean
+  safehouseId?: string
+  statusStateId?: number
+  categoryId?: number
+  residentCaseId?: string
+}
+
+export type DonorListItem = {
+  id: string
+  name: string
+  email: string
+  lastActivityAt: string
+  lifetimeContributions: number
+}
+
+export type ResidentCaseListItem = {
+  id: string
+  safehouseId: string
+  safehouse: string
+  caseCategoryId: number
+  category: string
+  statusStateId: number
+  status: string
+  socialWorkerExternalId: string | null
+  openedAt: string
+  closedAt: string | null
+}
+
+export type ProcessRecordItem = {
+  id: string
+  residentCaseId: string
+  recordedAt: string
+  summary: string
+}
+
+export type HomeVisitItem = {
+  id: string
+  residentCaseId: string
+  visitDate: string
+  visitType: string
+  status: string
+  notes: string
+}
+
+export type CaseConferenceItem = {
+  id: string
+  residentCaseId: string
+  conferenceDate: string
+  status: string
+  outcomeSummary: string
+}
+
+export type ApiErrorEnvelope = {
+  errorCode: string
+  message: string
+  traceId: string
+}

@@ -2,43 +2,52 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
+using SafeHarbor.Services.Admin;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/process-recordings")]
 [Authorize(Policy = PolicyNames.StaffOrAdmin)]
-public sealed class ProcessRecordingController : ControllerBase
+public sealed class ProcessRecordingController(IProcessRecordingService processRecordingService) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<PagedResult<ProcessRecordItem>> GetByResidentCase([FromQuery] Guid residentCaseId, [FromQuery] PagingQuery query)
+    public async Task<ActionResult<PagedResult<ProcessRecordItem>>> GetByResidentCase([FromQuery] PagingQuery query, CancellationToken ct)
     {
-        // TODO: Fetch process recordings from ICaseNarrativeStore when persistence is available.
-        // residentCaseId is intentionally kept in the contract so front-end integration does not change later.
-        _ = residentCaseId;
-        return Ok(new PagedResult<ProcessRecordItem>(Array.Empty<ProcessRecordItem>(), query.NormalizedPage, query.NormalizedPageSize, 0));
+        return Ok(await processRecordingService.GetAsync(query, ct));
     }
 
     [HttpPost]
-    // NOTE: Write operations stay SocialWorker-only as a stricter override because
-    // process recordings contain sensitive case narrative details.
     [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
-    public ActionResult<ProcessRecordItem> Create([FromBody] CreateProcessRecordRequest _)
+    public async Task<ActionResult<ProcessRecordItem>> Create([FromBody] CreateProcessRecordRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, "Process recording writes require database integration.");
+        var created = await processRecordingService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetByResidentCase), new { id = created.Id }, created);
     }
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
-    public ActionResult<ProcessRecordItem> Update(Guid id, [FromBody] CreateProcessRecordRequest _)
+    public async Task<ActionResult<ProcessRecordItem>> Update(Guid id, [FromBody] CreateProcessRecordRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, $"Process record {id} cannot be updated until database integration is complete.");
+        var updated = await processRecordingService.UpdateAsync(id, request, ct);
+        if (updated is null)
+        {
+            return NotFound(new ApiErrorEnvelope("NotFound", $"Process recording {id} was not found.", HttpContext.TraceIdentifier));
+        }
+
+        return Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
-    public IActionResult Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, $"Process record {id} cannot be deleted until database integration is complete.");
+        var deleted = await processRecordingService.DeleteAsync(id, ct);
+        if (!deleted)
+        {
+            return NotFound(new ApiErrorEnvelope("NotFound", $"Process recording {id} was not found.", HttpContext.TraceIdentifier));
+        }
+
+        return NoContent();
     }
 }

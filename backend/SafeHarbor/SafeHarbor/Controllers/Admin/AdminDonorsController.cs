@@ -2,94 +2,55 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
-using SafeHarbor.Infrastructure;
 using SafeHarbor.Services;
-using SafeHarbor.Models.Entities;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/donors")]
 [Authorize(Policy = PolicyNames.AdminOnly)]
-public sealed class AdminDonorsController(
-    InMemoryDataStore store,
-    IAuditLogger auditLogger,
-    IDataRetentionRedactionService retentionRedactionService) : ControllerBase
+public sealed class AdminDonorsController(IDonorAdminService donorAdminService) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<IReadOnlyCollection<DonorAdminResponse>> GetAll()
+    public async Task<ActionResult<IReadOnlyCollection<DonorAdminResponse>>> GetAll(CancellationToken ct)
     {
-        var payload = store.Donors.Select(MapAdmin).ToArray();
+        var payload = await donorAdminService.GetAllAsync(ct);
         return Ok(payload);
     }
 
     [HttpGet("{id:guid}")]
-    public ActionResult<DonorAdminResponse> GetById(Guid id)
+    public async Task<ActionResult<DonorAdminResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var donor = store.Donors.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException();
-        return Ok(MapAdmin(donor));
+        var donor = await donorAdminService.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        return Ok(donor);
     }
 
     [HttpPost]
-    public ActionResult<DonorAdminResponse> Create([FromBody] DonorCreateRequest request)
+    public async Task<ActionResult<DonorAdminResponse>> Create([FromBody] DonorCreateRequest request, CancellationToken ct)
     {
-        var donor = new SafeHarbor.Models.Entities.Donor
-        {
-            DisplayName = request.DisplayName,
-            Email = request.Email,
-            LifetimeDonations = request.LifetimeDonations,
-            PaymentToken = request.PaymentToken,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            UpdatedAtUtc = DateTimeOffset.UtcNow
-        };
-
-        store.Donors.Add(donor);
-        auditLogger.RecordMutation("donor", "create", donor.Id, User.Identity?.Name ?? "system");
-        return CreatedAtAction(nameof(GetById), new { id = donor.Id }, MapAdmin(donor));
+        var donor = await donorAdminService.CreateAsync(request, User.Identity?.Name ?? "system", ct);
+        return CreatedAtAction(nameof(GetById), new { id = donor.Id }, donor);
     }
 
     [HttpPut("{id:guid}")]
-    public ActionResult<DonorAdminResponse> Update(Guid id, [FromBody] DonorUpdateRequest request)
+    public async Task<ActionResult<DonorAdminResponse>> Update(Guid id, [FromBody] DonorUpdateRequest request, CancellationToken ct)
     {
-        var donor = store.Donors.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException();
-
-        donor.DisplayName = request.DisplayName;
-        donor.Email = request.Email;
-        donor.LifetimeDonations = request.LifetimeDonations;
-        donor.PaymentToken = request.PaymentToken;
-        donor.UpdatedAtUtc = DateTimeOffset.UtcNow;
-
-        auditLogger.RecordMutation("donor", "update", donor.Id, User.Identity?.Name ?? "system");
-        return Ok(MapAdmin(donor));
+        var donor = await donorAdminService.UpdateAsync(id, request, User.Identity?.Name ?? "system", ct) ?? throw new KeyNotFoundException();
+        return Ok(donor);
     }
 
     [HttpDelete("{id:guid}")]
-    public IActionResult Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var donor = store.Donors.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException();
-        store.Donors.Remove(donor);
-        auditLogger.RecordMutation("donor", "delete", donor.Id, User.Identity?.Name ?? "system");
+        var deleted = await donorAdminService.DeleteAsync(id, User.Identity?.Name ?? "system", ct);
+        if (!deleted) throw new KeyNotFoundException();
         return NoContent();
     }
 
     [HttpGet("reports/summary")]
-    public ActionResult<IReadOnlyCollection<DonorPublicResponse>> ReportSummary()
+    public async Task<ActionResult<IReadOnlyCollection<DonorPublicResponse>>> ReportSummary(CancellationToken ct)
     {
-        // NOTE: Keep summary report output detached from persistence models so sensitive fields cannot leak.
-        var payload = store.Donors
-            .Select(x => new DonorPublicResponse(x.Id, x.DisplayName, x.LifetimeDonations))
-            .ToArray();
-
-        return Ok(retentionRedactionService.ApplyRetentionPolicy(payload, "donor_summary_report"));
+        var payload = await donorAdminService.ReportSummaryAsync(ct);
+        return Ok(payload);
     }
-
-    private static DonorAdminResponse MapAdmin(SafeHarbor.Models.Entities.Donor donor) =>
-        new(
-            donor.Id,
-            donor.DisplayName,
-            donor.Email,
-            donor.LifetimeDonations,
-            donor.PaymentToken,
-            donor.CreatedAtUtc,
-            donor.UpdatedAtUtc);
 }

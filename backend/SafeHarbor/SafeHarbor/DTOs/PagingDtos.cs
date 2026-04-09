@@ -11,7 +11,11 @@ public sealed record PagingQuery(
     int PageSize = 20,
     string? SortBy = null,
     bool Desc = false,
-    string? Search = null)
+    string? Search = null,
+    Guid? SafehouseId = null,
+    int? StatusStateId = null,
+    int? CategoryId = null,
+    Guid? ResidentCaseId = null)
 {
     public int NormalizedPage => Page < 1 ? 1 : Page;
     public int NormalizedPageSize => Math.Clamp(PageSize, 1, 200);
