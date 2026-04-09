@@ -277,8 +277,11 @@ if (useInMemoryPersistence)
     DonorDashboardSeeder.Seed(app.Services.GetRequiredService<InMemoryDataStore>());
 }
 
-if (localAuthEnabled)
+if (app.Environment.IsDevelopment() && localAuthEnabled)
 {
+    // NOTE: IdentityDevelopmentSeeder relies on IdentityRole mappings that are only
+    // configured for development/local auth scenarios. Avoid running this in
+    // non-development environments to prevent startup failures in production.
     await IdentityDevelopmentSeeder.SeedAsync(app.Services);
 }
 
