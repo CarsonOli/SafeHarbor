@@ -73,14 +73,16 @@ var localAuthEnabled = (builder.Environment.IsDevelopment() && builder.Configura
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevelopmentFeatures:UseInMemoryDataStore");
 var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
 
-if (localAuthEnabled)
+// FORCE local auth logic so we don't need Azure/Microsoft ClientIDs
+// We set this to true so Render uses your email/password logic
+var forceLocalAuth = true; 
+
+if (forceLocalAuth)
 {
-    // Development-only JWT validation path. This keeps local auth deterministic while preserving
-    // the same bearer-token middleware used in production with Entra ID.
     var issuer = builder.Configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
     var audience = builder.Configuration["LocalAuth:Audience"] ?? "safeharbor-local-client";
-    var signingKey = builder.Configuration["LocalAuth:SigningKey"]
-        ?? throw new InvalidOperationException("LocalAuth:SigningKey is required when LocalAuth:Enabled=true.");
+    // On Render, we'll use a fallback key if the secret isn't set
+    var signingKey = builder.Configuration["LocalAuth:SigningKey"] ?? "A_Very_Long_Secret_Key_For_Testing_12345!";
 
     authBuilder.AddJwtBearer(options =>
     {
@@ -96,10 +98,6 @@ if (localAuthEnabled)
             ClockSkew = TimeSpan.FromMinutes(1)
         };
     });
-}
-else
-{
-    authBuilder.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
 }
 
 builder.Services.AddAuthorization(options =>
@@ -140,34 +138,27 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
 
-if (useInMemoryPersistence)
-{
-    // NOTE: In-memory persistence is an explicit development-only fallback for demos or local debugging.
-    // Deployed environments must remain DB-backed to preserve durable data and operational consistency.
-    builder.Services.AddSingleton<InMemoryDataStore>();
-    builder.Services.AddScoped<IResidentRepository, InMemoryResidentRepository>();
-    builder.Services.AddScoped<IDonorRepository, InMemoryDonorRepository>();
-    builder.Services.AddScoped<ICampaignRepository, InMemoryCampaignRepository>();
-    builder.Services.AddScoped<IContributionRepository, InMemoryContributionRepository>();
-}
-else
-{
-    builder.Services.AddScoped<IResidentRepository, DbResidentRepository>();
-    builder.Services.AddScoped<IDonorRepository, DbDonorRepository>();
-    builder.Services.AddScoped<ICampaignRepository, DbCampaignRepository>();
-    builder.Services.AddScoped<IContributionRepository, DbContributionRepository>();
-}
+// --- REPOSITORY REGISTRATION ---
+// We remove the 'if' check to ensure Render ALWAYS uses the Postgres database.
+// If you ever need to go back to In-Memory locally, you can toggle it here manually.
+builder.Services.AddScoped<IResidentRepository, DbResidentRepository>();
+builder.Services.AddScoped<IDonorRepository, DbDonorRepository>();
+builder.Services.AddScoped<ICampaignRepository, DbCampaignRepository>();
+builder.Services.AddScoped<IContributionRepository, DbContributionRepository>();
 
+// --- SERVICE REGISTRATION ---
 builder.Services.AddScoped<IResidentAdminService, ResidentAdminService>();
 builder.Services.AddScoped<IDonorAdminService, DonorAdminService>();
 builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
 builder.Services.AddScoped<IDonorDashboardService, DonorDashboardService>();
 builder.Services.AddScoped<IDonorAnalyticsService, DonorAnalyticsService>();
 
-// Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
-// TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.
-// The controller and frontend are unaffected by this change.
+// --- DONOR IMPACT CALCULATOR ---
+// This is the "Girls Helped" logic. If you have an ML model class (e.g., MlImpactCalculator), 
+// swap 'RuleBasedImpactCalculator' for your new class name below.
 builder.Services.AddSingleton<IDonorImpactCalculator, RuleBasedImpactCalculator>();
+
+// --- ADDITIONAL BUSINESS LOGIC ---
 builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>();
 builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
 builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
@@ -296,7 +287,10 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseCors();
 // Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment()) 
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 
