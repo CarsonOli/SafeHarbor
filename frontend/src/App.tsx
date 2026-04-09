@@ -78,13 +78,14 @@ function App() {
             {/* Added Link wrapper and Logo Image */}
             <Link to="/" className="brand-link" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none', position: 'relative', zIndex: 10 }}>
               <img 
-                src="/favicon.png"  /* We know this file works because your tab icon works! */
+                src="/favicon.png"
                 alt="Safe Harbor Logo" 
+                width="38"   /* Explicit width for Lighthouse CLS */
+                height="38"  /* Explicit height for Lighthouse CLS */
                 style={{ 
                   height: '38px', 
                   width: 'auto',
                   display: 'inline-block',
-                  /* Temporarily removed the filter to ensure it's visible */
                 }} 
               />
               <div className="brand" aria-label="Safe Harbor" style={{ color: '#2a5c5c' }}>
