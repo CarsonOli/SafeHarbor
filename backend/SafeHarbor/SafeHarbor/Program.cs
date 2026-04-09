@@ -191,6 +191,32 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+var contentSecurityPolicy = string.Join("; ",
+[
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "img-src 'self' data:",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    // Azure Entra sign-in metadata and token exchange calls require outbound connect access.
+    "connect-src 'self' https://login.microsoftonline.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+]);
+
+app.Use(async (context, next) =>
+{
+    // Set a single CSP for every response so browser-enforced defaults stay consistent across endpoints.
+    context.Response.OnStarting(() =>
+    {
+        context.Response.Headers["Content-Security-Policy"] = contentSecurityPolicy;
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
+
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseCors();
 // Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.

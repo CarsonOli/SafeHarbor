@@ -31,6 +31,19 @@ This repository now includes:
 - **Non-technical admin SOPs** in `docs/admin/non-technical-admin-guide.md`.
 - **Starter telemetry dashboard JSON** in `infra/azure/staging-telemetry-dashboard.json`.
 
+## Content Security Policy (CSP) allowlist
+
+The API now emits a `Content-Security-Policy` header with strict defaults to reduce cross-site scripting risk while preserving required integrations:
+
+- `default-src 'self'` keeps all resource classes same-origin by default.
+- `script-src 'self'` allows only first-party scripts.
+- `style-src 'self' https://fonts.googleapis.com` allows bundled CSS plus Google Fonts stylesheet delivery.
+- `img-src 'self' data:` allows first-party images and inline data URI assets (for small embedded icons/previews).
+- `font-src 'self' https://fonts.gstatic.com data:` allows first-party and Google-hosted font files.
+- `connect-src 'self' https://login.microsoftonline.com` allows first-party API calls and Microsoft Entra ID auth-related calls.
+
+Additional hardening directives are also applied (`object-src 'none'`, `base-uri 'self'`, and `frame-ancestors 'none'`) to block legacy plugin content and reduce framing/navigation abuse.
+
 ## Data sensitivity and handling model
 
 All entities/fields should be tagged conceptually into one of the following classes during modeling and review:
