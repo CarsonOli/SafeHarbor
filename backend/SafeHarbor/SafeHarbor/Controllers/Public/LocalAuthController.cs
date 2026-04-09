@@ -2,10 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using SafeHarbor.Auth;
+using SafeHarbor.Services.Auth;
 
 namespace SafeHarbor.Controllers.Public;
 
@@ -14,51 +14,24 @@ namespace SafeHarbor.Controllers.Public;
 public sealed class LocalAuthController(
     IConfiguration configuration,
     IWebHostEnvironment environment,
-    UserManager<AppUser> userManager) : ControllerBase
+    IAuthService authService) : ControllerBase
 {
-    internal static readonly HashSet<string> AllowedRoles = ["Admin", "SocialWorker", "Donor"];
-
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         if (!IsLocalAuthEnabled())
         {
             return NotFound(new { error = "Local authentication is disabled." });
         }
 
-        if (!AllowedRoles.Contains(request.Role))
-        {
-            return BadRequest(new { error = "A supported role is required." });
-        }
+        var registerResult = await authService.RegisterAsync(
+            new RegisterAuthRequest(request.Email, request.Role, request.Password),
+            cancellationToken);
 
-        var existingUser = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (existingUser is not null)
+        if (!registerResult.Succeeded)
         {
-            return BadRequest(new { error = "An account already exists for this email." });
-        }
-
-        var user = new AppUser
-        {
-            UserName = request.Email.Trim(),
-            Email = request.Email.Trim(),
-            EmailConfirmed = true,
-        };
-
-        var createResult = await userManager.CreateAsync(user, request.Password);
-        if (!createResult.Succeeded)
-        {
-            // NOTE: Surface identity validator output so clients can correct password policy failures
-            // without reverse-engineering backend rules.
-            var message = string.Join("; ", createResult.Errors.Select(error => error.Description));
-            return BadRequest(new { error = message });
-        }
-
-        var roleResult = await userManager.AddToRoleAsync(user, request.Role);
-        if (!roleResult.Succeeded)
-        {
-            var message = string.Join("; ", roleResult.Errors.Select(error => error.Description));
-            return BadRequest(new { error = message });
+            return BadRequest(new { error = registerResult.Error ?? "Registration failed." });
         }
 
         return StatusCode(StatusCodes.Status201Created);
@@ -66,37 +39,20 @@ public sealed class LocalAuthController(
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
+    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         if (!IsLocalAuthEnabled())
         {
             return NotFound(new { error = "Local authentication is disabled." });
         }
 
-        var user = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (user is null)
-        {
-            return BadRequest(new { error = "No local account found for this email. Create an account first." });
-        }
+        var authResult = await authService.AuthenticateAsync(
+            new LoginAuthRequest(request.Email, request.Password, request.Role),
+            cancellationToken);
 
-        if (await userManager.IsLockedOutAsync(user))
+        if (!authResult.Succeeded || authResult.Claims is null || authResult.Profile is null)
         {
-            return BadRequest(new { error = "Account is locked due to repeated failed logins. Try again later." });
-        }
-
-        var passwordValid = await userManager.CheckPasswordAsync(user, request.Password);
-        if (!passwordValid)
-        {
-            await userManager.AccessFailedAsync(user);
-            return BadRequest(new { error = "Incorrect password." });
-        }
-
-        await userManager.ResetAccessFailedCountAsync(user);
-        var roles = await userManager.GetRolesAsync(user);
-
-        if (request.Role is not null && !roles.Contains(request.Role, StringComparer.Ordinal))
-        {
-            return BadRequest(new { error = "Requested role is not assigned to this account." });
+            return BadRequest(new { error = authResult.Error ?? "Invalid credentials." });
         }
 
         var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -109,20 +65,6 @@ public sealed class LocalAuthController(
         }
 
         var now = DateTime.UtcNow;
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.Email, user.Email ?? request.Email.Trim()),
-            new("preferred_username", user.Email ?? request.Email.Trim()),
-            new("sub", user.Id.ToString()),
-        };
-
-        foreach (var role in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role));
-            claims.Add(new Claim("role", role));
-            claims.Add(new Claim("roles", role));
-        }
-
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
             SecurityAlgorithms.HmacSha256);
@@ -132,7 +74,7 @@ public sealed class LocalAuthController(
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
-            claims: claims,
+            claims: authResult.Claims,
             notBefore: now,
             expires: now.AddMinutes(tokenLifetimeMinutes),
             signingCredentials: credentials);
@@ -142,7 +84,7 @@ public sealed class LocalAuthController(
 
     [HttpGet("me")]
     [Authorize]
-    public ActionResult<MeResponse> Me()
+    public async Task<ActionResult<MeResponse>> Me(CancellationToken cancellationToken)
     {
         var email = User.FindFirstValue(ClaimTypes.Email)
             ?? User.FindFirstValue("preferred_username")
@@ -153,23 +95,23 @@ public sealed class LocalAuthController(
             return Unauthorized();
         }
 
-        var roles = User.Claims
-            .Where(claim => claim.Type is ClaimTypes.Role or "role" or "roles")
-            .Select(claim => claim.Value)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var profile = await authService.LookupProfileByEmailAsync(email, cancellationToken);
+        if (profile is null)
+        {
+            return Unauthorized();
+        }
 
-        return Ok(new MeResponse(email, roles));
+        return Ok(new MeResponse(profile.Email, profile.ApiRoles));
     }
 
     // Legacy aliases kept for compatibility with existing frontend and tests while clients migrate.
     [HttpPost("local-register")]
     [AllowAnonymous]
-    public Task<IActionResult> LocalRegister([FromBody] RegisterRequest request) => Register(request);
+    public Task<IActionResult> LocalRegister([FromBody] RegisterRequest request, CancellationToken cancellationToken) => Register(request, cancellationToken);
 
     [HttpPost("local-login")]
     [AllowAnonymous]
-    public Task<ActionResult<LoginResponse>> LocalLogin([FromBody] LoginRequest request) => Login(request);
+    public Task<ActionResult<LoginResponse>> LocalLogin([FromBody] LoginRequest request, CancellationToken cancellationToken) => Login(request, cancellationToken);
 
     private bool IsLocalAuthEnabled() => environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled");
 }
