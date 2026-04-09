@@ -27,6 +27,7 @@ This repository now includes:
 - **CD staging pipeline** at `.github/workflows/cd-staging.yml` (Azure backend + static frontend deployment).
 - **Health checks and telemetry hooks** in `backend/SafeHarbor/SafeHarbor/Program.cs`.
 - **Operational runbooks** in `docs/operations/`.
+- **HTTPS redirect verification runbook and demo script** in `docs/operations/https-redirect-runbook.md` and `docs/operations/demo-https-redirect-script.md`.
 - **Non-technical admin SOPs** in `docs/admin/non-technical-admin-guide.md`.
 - **Starter telemetry dashboard JSON** in `infra/azure/staging-telemetry-dashboard.json`.
 
