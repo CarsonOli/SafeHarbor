@@ -57,7 +57,7 @@ public sealed record UpdateResidentCaseRequest(
     DateTimeOffset? ClosedAt);
 
 public sealed record ProcessRecordItem(Guid Id, Guid ResidentCaseId, DateTimeOffset RecordedAt, string Summary);
-public sealed record CreateProcessRecordRequest([property: Required] Guid ResidentCaseId, [property: StringLength(4000, MinimumLength = 3)] string Summary, DateTimeOffset? RecordedAt);
+public sealed record CreateProcessRecordRequest([property: Required] Guid ResidentCaseId, [property: Required, StringLength(4000, MinimumLength = 3)] string Summary, DateTimeOffset? RecordedAt);
 
 public sealed record HomeVisitItem(Guid Id, Guid ResidentCaseId, DateTimeOffset VisitDate, string VisitType, string Status, string Notes);
 public sealed record CaseConferenceItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);

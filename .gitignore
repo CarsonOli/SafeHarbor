@@ -1,3 +1,4 @@
-﻿.vs/
-bin/
-obj/
+# Local environment files can contain secrets and must never be committed.
+.env
+.env.*
+!.env.example

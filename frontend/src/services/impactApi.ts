@@ -11,6 +11,7 @@ const IMPACT_ENDPOINT = import.meta.env.VITE_IMPACT_AGGREGATE_PATH ?? '/api/impa
 const REPORTS_ENDPOINT = import.meta.env.VITE_REPORTS_ANALYTICS_PATH ?? '/api/admin/reports-analytics'
 const SOCIAL_METRICS_ENDPOINT =
   import.meta.env.VITE_SOCIAL_POST_METRICS_PATH ?? '/api/admin/social-post-metrics'
+const ENABLE_DEV_FALLBACK = (import.meta.env.VITE_ENABLE_IMPACT_DEV_FALLBACK ?? 'false') === 'true'
 
 const fallbackImpactData: ImpactSummary = {
   generatedAt: '2026-04-01T00:00:00.000Z',
@@ -121,8 +122,13 @@ export async function fetchImpactSummary(): Promise<ImpactSummary> {
     const data = (await response.json()) as ImpactSummary
     return data
   } catch {
-    // NOTE: Local fallback keeps the UI testable before backend rollout.
-    return fallbackImpactData
+    // NOTE: Mock fallback is intentionally opt-in for local development only.
+    // Production/default behavior must surface backend outages to the UI.
+    if (ENABLE_DEV_FALLBACK) {
+      return fallbackImpactData
+    }
+
+    throw new Error('Unable to load impact summary from backend API.')
   }
 }
 
@@ -141,8 +147,12 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
 
     return (await response.json()) as ReportsAnalyticsResponse
   } catch {
-    // NOTE: Fallback keeps report UI deterministic during local, unauthenticated development.
-    return fallbackReportsData
+    // NOTE: Fallback is explicitly gated so missing backend integrations fail loudly by default.
+    if (ENABLE_DEV_FALLBACK) {
+      return fallbackReportsData
+    }
+
+    throw new Error('Unable to load reports analytics from backend API.')
   }
 }
 

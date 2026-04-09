@@ -2,53 +2,101 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using SafeHarbor.Services.LocalAuth;
+using SafeHarbor.Auth;
 
 namespace SafeHarbor.Controllers.Public;
 
 [ApiController]
 [Route("api/auth")]
-[AllowAnonymous]
 public sealed class LocalAuthController(
     IConfiguration configuration,
     IWebHostEnvironment environment,
-    ILocalAccountStore localAccountStore) : ControllerBase
+    UserManager<AppUser> userManager) : ControllerBase
 {
     internal static readonly HashSet<string> AllowedRoles = ["Admin", "SocialWorker", "Donor"];
 
-    private bool IsLocalAuthEnabled() =>
-        (environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled")) ||
-        configuration.GetValue<bool>("LocalAuth:AllowInProduction");
-
-    [HttpPost("local-register")]
-    public IActionResult LocalRegister([FromBody] LocalRegisterRequest request)
+    [HttpPost("register")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         if (!IsLocalAuthEnabled())
         {
             return NotFound(new { error = "Local authentication is disabled." });
         }
 
-        if (!localAccountStore.TryCreateAccount(request, out var registerError))
+        if (!AllowedRoles.Contains(request.Role))
         {
-            return BadRequest(new { error = registerError });
+            return BadRequest(new { error = "A supported role is required." });
+        }
+
+        var existingUser = await userManager.FindByEmailAsync(request.Email.Trim());
+        if (existingUser is not null)
+        {
+            return BadRequest(new { error = "An account already exists for this email." });
+        }
+
+        var user = new AppUser
+        {
+            UserName = request.Email.Trim(),
+            Email = request.Email.Trim(),
+            EmailConfirmed = true,
+        };
+
+        var createResult = await userManager.CreateAsync(user, request.Password);
+        if (!createResult.Succeeded)
+        {
+            // NOTE: Surface identity validator output so clients can correct password policy failures
+            // without reverse-engineering backend rules.
+            var message = string.Join("; ", createResult.Errors.Select(error => error.Description));
+            return BadRequest(new { error = message });
+        }
+
+        var roleResult = await userManager.AddToRoleAsync(user, request.Role);
+        if (!roleResult.Succeeded)
+        {
+            var message = string.Join("; ", roleResult.Errors.Select(error => error.Description));
+            return BadRequest(new { error = message });
         }
 
         return StatusCode(StatusCodes.Status201Created);
     }
 
-    [HttpPost("local-login")]
-    public ActionResult<LocalLoginResponse> LocalLogin([FromBody] LocalLoginRequest request)
+    [HttpPost("login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
     {
         if (!IsLocalAuthEnabled())
         {
             return NotFound(new { error = "Local authentication is disabled." });
         }
 
-        if (!localAccountStore.TryValidateCredentials(request, out var account, out var loginError))
+        var user = await userManager.FindByEmailAsync(request.Email.Trim());
+        if (user is null)
         {
-            return BadRequest(new { error = loginError });
+            return BadRequest(new { error = "No local account found for this email. Create an account first." });
+        }
+
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return BadRequest(new { error = "Account is locked due to repeated failed logins. Try again later." });
+        }
+
+        var passwordValid = await userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValid)
+        {
+            await userManager.AccessFailedAsync(user);
+            return BadRequest(new { error = "Incorrect password." });
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user);
+        var roles = await userManager.GetRolesAsync(user);
+
+        if (request.Role is not null && !roles.Contains(request.Role, StringComparer.Ordinal))
+        {
+            return BadRequest(new { error = "Requested role is not assigned to this account." });
         }
 
         var issuer = configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
@@ -60,14 +108,19 @@ public sealed class LocalAuthController(
         }
 
         var now = DateTime.UtcNow;
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Email, account!.Email),
-            new Claim("preferred_username", account.Email),
-            new Claim(ClaimTypes.Role, account.Role),
-            new Claim("role", account.Role),
-            new Claim("sub", account.Email.ToLowerInvariant()),
+            new(ClaimTypes.Email, user.Email ?? request.Email.Trim()),
+            new("preferred_username", user.Email ?? request.Email.Trim()),
+            new("sub", user.Id.ToString()),
         };
+
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+            claims.Add(new Claim("role", role));
+            claims.Add(new Claim("roles", role));
+        }
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
@@ -81,10 +134,44 @@ public sealed class LocalAuthController(
             expires: now.AddHours(8),
             signingCredentials: credentials);
 
-        return Ok(new LocalLoginResponse(new JwtSecurityTokenHandler().WriteToken(token)));
+        return Ok(new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token)));
     }
+
+    [HttpGet("me")]
+    [Authorize]
+    public ActionResult<MeResponse> Me()
+    {
+        var email = User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue("preferred_username")
+            ?? User.Identity?.Name;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return Unauthorized();
+        }
+
+        var roles = User.Claims
+            .Where(claim => claim.Type is ClaimTypes.Role or "role" or "roles")
+            .Select(claim => claim.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return Ok(new MeResponse(email, roles));
+    }
+
+    // Legacy aliases kept for compatibility with existing frontend and tests while clients migrate.
+    [HttpPost("local-register")]
+    [AllowAnonymous]
+    public Task<IActionResult> LocalRegister([FromBody] RegisterRequest request) => Register(request);
+
+    [HttpPost("local-login")]
+    [AllowAnonymous]
+    public Task<ActionResult<LoginResponse>> LocalLogin([FromBody] LoginRequest request) => Login(request);
+
+    private bool IsLocalAuthEnabled() => environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled");
 }
 
-public sealed record LocalLoginRequest(string Email, string Role, string Password);
-public sealed record LocalRegisterRequest(string Email, string Role, string Password);
-public sealed record LocalLoginResponse(string IdToken);
+public sealed record LoginRequest(string Email, string Password, string? Role = null);
+public sealed record RegisterRequest(string Email, string Role, string Password);
+public sealed record LoginResponse(string IdToken);
+public sealed record MeResponse(string Email, IReadOnlyCollection<string> Roles);

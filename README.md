@@ -17,9 +17,10 @@ The project follows the architecture defined in `ARCHITECTURE_DECISION_RECORD.md
 
 ## Current development data mode
 
-- **No live database is wired in the current local build.**
-- Backend endpoints currently return empty placeholder payloads for database-backed modules, and write operations return `501 Not Implemented` until persistence is connected.
-- This prevents synthetic records from being mistaken for real resident or donor data while infrastructure work is still in progress.
+- **Database-backed persistence is the default mode in all environments, including deployed app environments.**
+- Admin/public/donor controllers now resolve persistence through repository/service interfaces so domain logic is consistent whether data comes from EF Core repositories or approved development fallbacks.
+- **In-memory data is development-only and opt-in** via `DevelopmentFeatures:UseInMemoryDataStore=true` (only honored when `ASPNETCORE_ENVIRONMENT=Development`).
+- Keep the in-memory flag disabled for staging/production so operational behavior always reflects durable PostgreSQL-backed data.
 
 This repository now includes:
 
@@ -27,8 +28,51 @@ This repository now includes:
 - **CD staging pipeline** at `.github/workflows/cd-staging.yml` (Azure backend + static frontend deployment).
 - **Health checks and telemetry hooks** in `backend/SafeHarbor/SafeHarbor/Program.cs`.
 - **Operational runbooks** in `docs/operations/`.
+- **HTTPS redirect verification runbook and demo script** in `docs/operations/https-redirect-runbook.md` and `docs/operations/demo-https-redirect-script.md`.
 - **Non-technical admin SOPs** in `docs/admin/non-technical-admin-guide.md`.
 - **Starter telemetry dashboard JSON** in `infra/azure/staging-telemetry-dashboard.json`.
+
+
+## Secrets configuration (local + cloud)
+
+Tracked config files (`appsettings.json` and `appsettings.Development.json`) now contain placeholders only for sensitive values. Set real secrets in one of the supported secret providers below.
+
+| Source | When to use | Keys |
+|---|---|---|
+| Environment variables | CI/CD, containers, quick local overrides | `ConnectionStrings__DefaultConnection`, `LocalAuth__SigningKey`, `KeyVault__VaultUri`, `DevelopmentFeatures__UseInMemoryDataStore` |
+| .NET user-secrets | Local development on trusted machines | `ConnectionStrings:DefaultConnection`, `LocalAuth:SigningKey`, `DevelopmentFeatures:UseInMemoryDataStore` |
+| Azure Key Vault | Shared non-local environments | `ConnectionStrings--DefaultConnection`, `LocalAuth--SigningKey` |
+
+### Local bootstrap
+
+1. Copy `backend/SafeHarbor/.env.example` to `.env` (or export equivalent shell variables).
+2. Prefer `dotnet user-secrets` for local-only secrets:
+   - `dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<value>" --project backend/SafeHarbor/SafeHarbor/SafeHarbor.csproj`
+   - `dotnet user-secrets set "LocalAuth:SigningKey" "<32+ char key>" --project backend/SafeHarbor/SafeHarbor/SafeHarbor.csproj`
+3. For cloud, set `KeyVault:VaultUri` and store secret values in Azure Key Vault.
+
+### Credential/signing-key rotation checklist
+
+If credentials or signing keys were ever committed, rotate immediately:
+
+1. Rotate the PostgreSQL user password/connection string at the database server.
+2. Rotate `LocalAuth:SigningKey` (new random 32+ char value) in user-secrets, CI secret store, and Key Vault.
+3. Redeploy/restart workloads so old secrets are no longer active in memory.
+4. Revoke and replace any dependent app registrations or tokens if they used the exposed secret.
+5. Validate startup/auth flows after rotation and remove stale values from local machines.
+
+## Content Security Policy (CSP) allowlist
+
+The API now emits a `Content-Security-Policy` header with strict defaults to reduce cross-site scripting risk while preserving required integrations:
+
+- `default-src 'self'` keeps all resource classes same-origin by default.
+- `script-src 'self'` allows only first-party scripts.
+- `style-src 'self' https://fonts.googleapis.com` allows bundled CSS plus Google Fonts stylesheet delivery.
+- `img-src 'self' data:` allows first-party images and inline data URI assets (for small embedded icons/previews).
+- `font-src 'self' https://fonts.gstatic.com data:` allows first-party and Google-hosted font files.
+- `connect-src 'self' https://login.microsoftonline.com` allows first-party API calls and Microsoft Entra ID auth-related calls.
+
+Additional hardening directives are also applied (`object-src 'none'`, `base-uri 'self'`, and `frame-ancestors 'none'`) to block legacy plugin content and reduce framing/navigation abuse.
 
 ## Data sensitivity and handling model
 

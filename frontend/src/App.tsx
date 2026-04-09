@@ -10,12 +10,14 @@ function App() {
   const isDonor = session?.role === 'Donor'
 
   // Build the navigation list based on the logged-in role.
-  // - Visitors (no session): see only public pages + login link.
-  // - Donors: see only their donor dashboard link (matrix keeps donor and staff areas separate).
-  // - Staff (Admin, SocialWorker): see all staff-only routes, including /privacy and /donate.
+  // - Visitors (no session): see public pages including /donate.
+  // - Donors: see /donate and their donation history dashboard.
+  // - Staff (Admin, SocialWorker): see staff-only routes plus public pages.
   const navigation = [
     { to: '/', label: 'Home' },
     { to: '/impact', label: 'Impact Dashboard' },
+    // Keep Donate visible to everyone because the page supports both guest and donor flows.
+    { to: '/donate', label: 'Donate' },
 
     // Staff-only nav links — hidden from donors and visitors.
     ...(isStaff
@@ -28,7 +30,6 @@ function App() {
           { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
           { to: '/app/reports', label: 'Reports' },
           { to: '/privacy', label: 'Privacy' },
-          { to: '/donate', label: 'Donate' },
         ]
       : []),
 
@@ -109,12 +110,10 @@ function App() {
       >
         <div className="side-nav-header">
           <p className="eyebrow">Navigation</p>
-          {/* Keep CTA aligned with route guards: only staff can navigate to /donate. */}
-          {isStaff && (
-            <Link to="/donate" className="button nav-donate-button" onClick={() => setIsMenuOpen(false)}>
-              Donate Now
-            </Link>
-          )}
+          {/* Keep CTA aligned with route guards: /donate is publicly accessible. */}
+          <Link to="/donate" className="button nav-donate-button" onClick={() => setIsMenuOpen(false)}>
+            Donate Now
+          </Link>
         </div>
         <ul className="side-nav-list">
           {navigation.map((item) => (
@@ -140,6 +139,10 @@ function App() {
         <div className="container footer-content">
           <p>© {new Date().getFullYear()} Safe Harbor</p>
           <p>Anonymized impact insights for responsible care partnerships.</p>
+          {/* GDPR policy must remain discoverable to authenticated and non-authenticated users. */}
+          <p>
+            <Link to="/privacy">Privacy policy</Link>
+          </p>
         </div>
       </footer>
 

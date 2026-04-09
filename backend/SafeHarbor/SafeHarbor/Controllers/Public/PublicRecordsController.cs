@@ -1,43 +1,24 @@
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.DTOs;
-using SafeHarbor.Infrastructure;
+using SafeHarbor.Services;
 
 namespace SafeHarbor.Controllers.Public;
 
 [ApiController]
 [Route("api/public")]
-public sealed class PublicRecordsController(InMemoryDataStore store) : ControllerBase
+public sealed class PublicRecordsController(IPublicRecordsService publicRecordsService) : ControllerBase
 {
     [HttpGet("residents")]
-    public ActionResult<IReadOnlyCollection<ResidentPublicResponse>> GetResidents()
+    public async Task<ActionResult<IReadOnlyCollection<ResidentPublicResponse>>> GetResidents(CancellationToken ct)
     {
-        var residents = store.Residents
-            .Select(r => new ResidentPublicResponse(r.Id, r.FullName, CalculateAgeYears(r.DateOfBirth)))
-            .ToArray();
-
+        var residents = await publicRecordsService.GetResidentsAsync(ct);
         return Ok(residents);
     }
 
     [HttpGet("donors")]
-    public ActionResult<IReadOnlyCollection<DonorPublicResponse>> GetDonors()
+    public async Task<ActionResult<IReadOnlyCollection<DonorPublicResponse>>> GetDonors(CancellationToken ct)
     {
-        var donors = store.Donors
-            .Select(d => new DonorPublicResponse(d.Id, d.DisplayName, d.LifetimeDonations))
-            .ToArray();
-
+        var donors = await publicRecordsService.GetDonorsAsync(ct);
         return Ok(donors);
-    }
-
-    private static int CalculateAgeYears(DateOnly dateOfBirth)
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var years = today.Year - dateOfBirth.Year;
-
-        if (today < dateOfBirth.AddYears(years))
-        {
-            years--;
-        }
-
-        return years;
     }
 }

@@ -4,9 +4,8 @@ namespace SafeHarbor.DTOs;
 // Returned by GET /api/admin/donor-analytics.
 // The frontend TypeScript types in src/types/impact.ts mirror this structure.
 //
-// DESIGN NOTE: All aggregations are computed on the server from InMemoryDataStore
-// so the frontend stays purely presentational. When a real database is wired,
-// these same DTOs can be returned from EF Core queries with no frontend changes.
+// DESIGN NOTE: All aggregations are computed on the server via domain services/repositories
+// so the frontend stays purely presentational regardless of the active persistence provider.
 
 /// <summary>
 /// Full response for the admin donor analytics dashboard.

@@ -1,18 +1,33 @@
+using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore; 
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using SafeHarbor.Auth;
 using SafeHarbor.Authorization;
 using SafeHarbor.Data; 
+using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
 using SafeHarbor.Services;
+using SafeHarbor.Services.Admin;
 using SafeHarbor.Services.DonorImpact;
-using SafeHarbor.Services.LocalAuth;
+using SafeHarbor.Services.Public;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// NOTE: ASP.NET's default host builder already loads appsettings + environment variables + user-secrets
+// (in Development). We add optional Azure Key Vault on top so deployed environments can avoid file-based secrets.
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrWhiteSpace(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+}
 
 // Logging configuration
 builder.Logging.ClearProviders();
@@ -28,8 +43,33 @@ builder.Services.AddDbContext<SafeHarborDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 // --- DATABASE REGISTRATION END ---
 
-var localAuthEnabled = (builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled"))
-    || builder.Configuration.GetValue<bool>("LocalAuth:AllowInProduction");
+var passwordPolicy = builder.Configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>()
+    ?? new PasswordPolicyOptions();
+
+builder.Services
+    .AddIdentityCore<AppUser>(options =>
+    {
+        // NOTE: We bind explicit classroom/lab policy values here so auth behavior stays predictable
+        // across local, CI, and deployed environments instead of relying on framework defaults.
+        options.Password.RequiredLength = passwordPolicy.RequiredLength;
+        options.Password.RequiredUniqueChars = passwordPolicy.RequiredUniqueChars;
+        options.Password.RequireDigit = passwordPolicy.RequireDigit;
+        options.Password.RequireLowercase = passwordPolicy.RequireLowercase;
+        options.Password.RequireUppercase = passwordPolicy.RequireUppercase;
+        options.Password.RequireNonAlphanumeric = passwordPolicy.RequireNonAlphanumeric;
+
+        options.Lockout.MaxFailedAccessAttempts = passwordPolicy.MaxFailedAccessAttempts;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(passwordPolicy.DefaultLockoutMinutes);
+        options.Lockout.AllowedForNewUsers = true;
+
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddRoles<IdentityRole<Guid>>()
+    .AddEntityFrameworkStores<SafeHarborDbContext>()
+    .AddSignInManager();
+
+var localAuthEnabled = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
+var useInMemoryPersistence = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevelopmentFeatures:UseInMemoryDataStore");
 var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
 
 if (localAuthEnabled)
@@ -98,20 +138,41 @@ builder.Services.AddCors(options =>
 // Services Registration
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
-if (builder.Configuration.GetValue<bool>("LocalAuth:AllowInProduction"))
+
+if (useInMemoryPersistence)
 {
-    builder.Services.AddScoped<ILocalAccountStore, PostgresLocalAccountStore>();
+    // NOTE: In-memory persistence is an explicit development-only fallback for demos or local debugging.
+    // Deployed environments must remain DB-backed to preserve durable data and operational consistency.
+    builder.Services.AddSingleton<InMemoryDataStore>();
+    builder.Services.AddScoped<IResidentRepository, InMemoryResidentRepository>();
+    builder.Services.AddScoped<IDonorRepository, InMemoryDonorRepository>();
+    builder.Services.AddScoped<ICampaignRepository, InMemoryCampaignRepository>();
+    builder.Services.AddScoped<IContributionRepository, InMemoryContributionRepository>();
 }
 else
 {
-    builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
+    builder.Services.AddScoped<IResidentRepository, DbResidentRepository>();
+    builder.Services.AddScoped<IDonorRepository, DbDonorRepository>();
+    builder.Services.AddScoped<ICampaignRepository, DbCampaignRepository>();
+    builder.Services.AddScoped<IContributionRepository, DbContributionRepository>();
 }
-builder.Services.AddSingleton<InMemoryDataStore>();
+
+builder.Services.AddScoped<IResidentAdminService, ResidentAdminService>();
+builder.Services.AddScoped<IDonorAdminService, DonorAdminService>();
+builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
+builder.Services.AddScoped<IDonorDashboardService, DonorDashboardService>();
+builder.Services.AddScoped<IDonorAnalyticsService, DonorAnalyticsService>();
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
 // TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.
 // The controller and frontend are unaffected by this change.
 builder.Services.AddSingleton<IDonorImpactCalculator, RuleBasedImpactCalculator>();
+builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>();
+builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
+builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
+builder.Services.AddScoped<IDonorContributionService, DonorContributionService>();
+builder.Services.AddScoped<IReportsAnalyticsService, ReportsAnalyticsService>();
+builder.Services.AddScoped<IImpactAggregateService, ImpactAggregateService>();
 
 // NOTE: Live/ready probes support platform health checks and safer blue/green swaps.
 builder.Services.AddHealthChecks();
@@ -147,16 +208,50 @@ builder.Services.AddOpenTelemetry()
         }
     });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Keep create/update validation failures in a stable envelope shape for frontend forms.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var firstError = context.ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .FirstOrDefault(msg => !string.IsNullOrWhiteSpace(msg))
+                ?? "Request payload validation failed.";
+
+            return new BadRequestObjectResult(new ApiErrorEnvelope("ValidationError", firstError, context.HttpContext.TraceIdentifier));
+        };
+    });
 builder.Services.AddOpenApi();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // Cloud ingress/edge proxies terminate TLS and forward scheme/ip headers to the app.
+    // Enabling both headers keeps request metadata and HTTPS redirect behavior correct behind Azure/App Gateway.
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // NOTE: We intentionally clear known proxy restrictions only outside Development because
+    // cloud egress IPs can rotate; in-production trust is bounded at the platform/network layer.
+    if (!builder.Environment.IsDevelopment())
+    {
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+});
 
 var app = builder.Build();
 
-// Seed the in-memory store with test donors, a campaign, and contribution history.
-// This allows the donor dashboard to render immediately without a real database.
-// See Infrastructure/DonorDashboardSeeder.cs for test credentials and amounts.
-// TODO: Remove once a real database with migration seeds is in place.
-DonorDashboardSeeder.Seed(app.Services.GetRequiredService<InMemoryDataStore>());
+if (useInMemoryPersistence)
+{
+    // Seed dev-only in-memory data only when the explicit feature flag is enabled.
+    DonorDashboardSeeder.Seed(app.Services.GetRequiredService<InMemoryDataStore>());
+}
+
+if (localAuthEnabled)
+{
+    await IdentityDevelopmentSeeder.SeedAsync(app.Services);
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -170,8 +265,37 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+var contentSecurityPolicy = string.Join("; ",
+[
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "img-src 'self' data:",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    // Azure Entra sign-in metadata and token exchange calls require outbound connect access.
+    "connect-src 'self' https://login.microsoftonline.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+]);
+
+app.Use(async (context, next) =>
+{
+    // Set a single CSP for every response so browser-enforced defaults stay consistent across endpoints.
+    context.Response.OnStarting(() =>
+    {
+        context.Response.Headers["Content-Security-Policy"] = contentSecurityPolicy;
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
+
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
-//app.UseHttpsRedirection();
+app.UseCors();
+// Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.
+app.UseForwardedHeaders();
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -2,36 +2,47 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
+using SafeHarbor.Services.Admin;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/donors-contributions")]
 [Authorize(Policy = PolicyNames.StaffOrAdmin)]
-public sealed class DonorsContributionsController : ControllerBase
+public sealed class DonorsContributionsController(IDonorContributionService donorContributionService) : ControllerBase
 {
     [HttpGet("donors")]
-    public ActionResult<PagedResult<DonorListItem>> GetDonors([FromQuery] PagingQuery query)
+    public async Task<ActionResult<PagedResult<DonorListItem>>> GetDonors([FromQuery] PagingQuery query, CancellationToken ct)
     {
-        // TODO: Replace placeholder with donor records from IDonorFundingStore when database wiring is available.
-        return Ok(new PagedResult<DonorListItem>(Array.Empty<DonorListItem>(), query.NormalizedPage, query.NormalizedPageSize, 0));
+        return Ok(await donorContributionService.GetDonorsAsync(query, ct));
     }
 
     [HttpPost("donors")]
-    public ActionResult<DonorListItem> CreateDonor([FromBody] CreateDonorRequest _)
+    public async Task<ActionResult<DonorListItem>> CreateDonor([FromBody] CreateDonorRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, "Donor writes require database integration.");
+        var created = await donorContributionService.CreateDonorAsync(request, ct);
+        return CreatedAtAction(nameof(GetDonors), new { id = created.Id }, created);
     }
 
     [HttpPost("contributions")]
-    public ActionResult<ContributionListItem> LogContribution([FromBody] CreateContributionRequest _)
+    public async Task<ActionResult<ContributionListItem>> LogContribution([FromBody] CreateContributionRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, "Contribution writes require database integration.");
+        var created = await donorContributionService.CreateContributionAsync(request, ct);
+        return Ok(created);
     }
 
     [HttpPost("allocations")]
-    public IActionResult TrackAllocation([FromBody] CreateAllocationRequest _)
+    public async Task<IActionResult> TrackAllocation([FromBody] CreateAllocationRequest request, CancellationToken ct)
     {
-        return StatusCode(StatusCodes.Status501NotImplemented, "Allocation writes require database integration.");
+        var created = await donorContributionService.CreateAllocationAsync(request, ct);
+        if (!created)
+        {
+            return NotFound(new ApiErrorEnvelope(
+                "RelationshipNotFound",
+                "Contribution and safehouse are required before an allocation can be recorded.",
+                HttpContext.TraceIdentifier));
+        }
+
+        return NoContent();
     }
 }

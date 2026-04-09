@@ -45,17 +45,28 @@ function CorrelationList({
 export function ReportsAnalyticsPage() {
   const [report, setReport] = useState<ReportsAnalyticsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     async function loadReport() {
       setIsLoading(true)
-      const data = await fetchReportsAnalytics()
+      try {
+        const data = await fetchReportsAnalytics()
 
-      if (!cancelled) {
-        setReport(data)
-        setIsLoading(false)
+        if (!cancelled) {
+          setReport(data)
+          setError(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load reports analytics')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
@@ -74,11 +85,29 @@ export function ReportsAnalyticsPage() {
     return report.topAttributedPosts.reduce((total, item) => total + (item.attributedDonationAmount ?? 0), 0)
   }, [report])
 
-  if (isLoading || !report) {
+  if (isLoading) {
     return (
       <section>
         <h1>Reports & Analytics</h1>
         <p className="lead">Loading donation correlation report...</p>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section>
+        <h1>Reports & Analytics</h1>
+        <p role="alert">{error}</p>
+      </section>
+    )
+  }
+
+  if (!report) {
+    return (
+      <section>
+        <h1>Reports & Analytics</h1>
+        <p className="lead">No report data is available.</p>
       </section>
     )
   }
