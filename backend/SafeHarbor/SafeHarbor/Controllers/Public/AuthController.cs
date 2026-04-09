@@ -13,7 +13,7 @@ namespace SafeHarbor.Controllers.Public;
 
 [ApiController]
 [Route("api/auth")]
-public sealed class LocalAuthController(
+public sealed class AuthController(
     IConfiguration configuration,
     IWebHostEnvironment environment,
     IAuthService authService) : ControllerBase

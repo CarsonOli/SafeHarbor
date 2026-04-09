@@ -107,7 +107,7 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Keep claim mapping aligned with LocalAuthController token emission (ClaimTypes.Role + "role"/"roles")
+        // Keep claim mapping aligned with AuthController token emission (ClaimTypes.Role + "role"/"roles")
         // so role policies continue to work predictably across environments.
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
