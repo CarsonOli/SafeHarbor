@@ -1,16 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-    server: {
+  server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5264',  // ← change this to YOUR .NET port
+        target: process.env.VITE_DEV_PROXY_TARGET ?? 'http://localhost:5264',
         changeOrigin: true,
         secure: false,
-      }
-    }
-  }
+      },
+    },
+  },
 })
