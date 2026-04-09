@@ -35,7 +35,9 @@ function resolveApiBaseCandidates(): string[] {
   // Keep same-origin first for environments with an API proxy, then fall back to known
   // App Service hosts so auth flows still work when proxy wiring/env config is absent.
   if (typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')) {
-    return ['', ...STATIC_WEB_APP_FALLBACK_API_HOSTS]
+    // NOTE: Prefer explicit backend hosts first to avoid 405s from the static host
+    // when no API proxy is configured for /api/*.
+    return [...STATIC_WEB_APP_FALLBACK_API_HOSTS, '']
   }
 
   return ['']
