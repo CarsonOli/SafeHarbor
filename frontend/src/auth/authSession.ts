@@ -6,6 +6,19 @@
 export const roles = ['Admin', 'SocialWorker', 'Donor'] as const
 
 export type AppRole = (typeof roles)[number]
+export type DatabaseRole = 'admin' | 'staff' | 'user'
+
+const databaseToAppRoleMap: Record<DatabaseRole, AppRole> = {
+  admin: 'Admin',
+  staff: 'SocialWorker',
+  user: 'Donor',
+}
+
+const appToDatabaseRoleMap: Record<AppRole, DatabaseRole> = {
+  Admin: 'admin',
+  SocialWorker: 'staff',
+  Donor: 'user',
+}
 
 export type AuthSession = {
   email: string
@@ -15,6 +28,25 @@ export type AuthSession = {
 
 const AUTH_KEY = 'safeharbor.auth.session'
 
+export function normalizeRoleToAppRole(role: unknown): AppRole | null {
+  if (typeof role !== 'string') {
+    return null
+  }
+
+  // NOTE: localStorage and JWTs may contain legacy DB roles from prior clients.
+  // Normalize to the app role contract to keep route guards and navbar checks consistent.
+  if (roles.includes(role as AppRole)) {
+    return role as AppRole
+  }
+
+  const mappedRole = databaseToAppRoleMap[role as DatabaseRole]
+  return mappedRole ?? null
+}
+
+export function mapAppRoleToDatabaseRole(role: AppRole): DatabaseRole {
+  return appToDatabaseRoleMap[role]
+}
+
 export function loadSession(): AuthSession | null {
   const value = window.localStorage.getItem(AUTH_KEY)
   if (!value) {
@@ -23,7 +55,8 @@ export function loadSession(): AuthSession | null {
 
   try {
     const parsed = JSON.parse(value) as AuthSession
-    if (!parsed.email || !roles.includes(parsed.role)) {
+    const normalizedRole = normalizeRoleToAppRole(parsed.role)
+    if (!parsed.email || !normalizedRole) {
       return null
     }
 
@@ -33,7 +66,10 @@ export function loadSession(): AuthSession | null {
       return null
     }
 
-    return parsed
+    return {
+      ...parsed,
+      role: normalizedRole,
+    }
   } catch {
     return null
   }

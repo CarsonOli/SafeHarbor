@@ -13,6 +13,19 @@ The project follows the architecture defined in `ARCHITECTURE_DECISION_RECORD.md
 - **Identity:** Microsoft Entra ID for staff/admin authn with role-based policies.
 - **Primary roles:** `Admin`, `SocialWorker`, `Fundraising`, `Viewer`.
 
+## Authentication role mapping contract
+
+SafeHarbor persists local-auth roles in `lighthouse.users.role` using lowercase DB values, then maps them to app authorization roles used by JWT claims, API policies, and frontend route guards.
+
+| Database role (`lighthouse.users.role`) | App/API role (JWT + authorization) |
+|---|---|
+| `admin` | `Admin` |
+| `staff` | `SocialWorker` |
+| `user` | `Donor` |
+
+- Treat this as a contract: backend token generation and frontend authorization checks must stay in sync with this table.
+- API-local auth details and claim examples are documented in `docs/api/authentication.md`.
+
 ## Operations additions
 
 ## Current development data mode
