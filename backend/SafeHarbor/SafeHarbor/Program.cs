@@ -48,6 +48,7 @@ builder.Services.AddDbContext<SafeHarborDbContext>(options =>
 var passwordPolicy = builder.Configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>()
     ?? new PasswordPolicyOptions();
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection(PasswordPolicyOptions.SectionName));
 
 builder.Services
     .AddIdentityCore<AppUser>(options =>

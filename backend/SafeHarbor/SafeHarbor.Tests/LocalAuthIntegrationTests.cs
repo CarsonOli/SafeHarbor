@@ -61,7 +61,8 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>();
         Assert.NotNull(payload);
-        Assert.Contains("Passwords", payload!.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("ValidationError", payload!.ErrorCode);
+        Assert.Contains("Password", payload.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -90,7 +91,8 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
         Assert.Equal(HttpStatusCode.BadRequest, lockedResponse.StatusCode);
         var lockedPayload = await lockedResponse.Content.ReadFromJsonAsync<ErrorEnvelope>();
         Assert.NotNull(lockedPayload);
-        Assert.Contains("locked", lockedPayload!.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("InvalidCredentials", lockedPayload!.ErrorCode);
+        Assert.Contains("Invalid credentials", lockedPayload.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -119,6 +121,6 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
     }
 
     private sealed record LoginEnvelope(string IdToken);
-    private sealed record ErrorEnvelope(string Error);
+    private sealed record ErrorEnvelope(string ErrorCode, string Message, string TraceId);
     private sealed record MeEnvelope(string Email, string[] Roles);
 }
