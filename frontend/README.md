@@ -16,6 +16,10 @@ Common local settings:
 
 The backend switch is controlled by `LocalAuth:Enabled` in `backend/SafeHarbor/SafeHarbor/appsettings.Development.json`.
 
+For deployed environments, either set `VITE_API_BASE_URL` to your backend API host or configure your static host to proxy
+`/api/*` requests. Without one of those, auth requests can land on the frontend host and return `404/405` instead of reaching
+the API.
+
 Seeded local accounts are available for smoke testing:
 
 - `alice@example.com` / `Password123!` (Donor)

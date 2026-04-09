@@ -5,6 +5,17 @@
   },
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "*.js", "*.mjs", "*.css", "*.png", "*.jpg", "*.svg", "*.ico", "*.json"]
+    "exclude": [
+      "/api/*",
+      "/assets/*",
+      "*.js",
+      "*.mjs",
+      "*.css",
+      "*.png",
+      "*.jpg",
+      "*.svg",
+      "*.ico",
+      "*.json"
+    ]
   }
 }
