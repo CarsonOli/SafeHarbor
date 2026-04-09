@@ -1,11 +1,14 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using SafeHarbor.Auth;
 using SafeHarbor.Models.Entities;
 using SafeHarbor.Models.Lookups;
 using SafeHarbor.Models;
 
 namespace SafeHarbor.Data
 {
-    public class SafeHarborDbContext : DbContext
+    public class SafeHarborDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
         public SafeHarborDbContext(DbContextOptions<SafeHarborDbContext> options)
             : base(options)

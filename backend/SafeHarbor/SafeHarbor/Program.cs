@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore; 
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using SafeHarbor.Auth;
 using SafeHarbor.Authorization;
 using SafeHarbor.Data; 
 using SafeHarbor.DTOs;
@@ -13,7 +15,6 @@ using SafeHarbor.Infrastructure;
 using SafeHarbor.Services;
 using SafeHarbor.Services.Admin;
 using SafeHarbor.Services.DonorImpact;
-using SafeHarbor.Services.LocalAuth;
 using SafeHarbor.Services.Public;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -31,6 +32,31 @@ builder.Logging.AddJsonConsole(options =>
 builder.Services.AddDbContext<SafeHarborDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 // --- DATABASE REGISTRATION END ---
+
+var passwordPolicy = builder.Configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>()
+    ?? new PasswordPolicyOptions();
+
+builder.Services
+    .AddIdentityCore<AppUser>(options =>
+    {
+        // NOTE: We bind explicit classroom/lab policy values here so auth behavior stays predictable
+        // across local, CI, and deployed environments instead of relying on framework defaults.
+        options.Password.RequiredLength = passwordPolicy.RequiredLength;
+        options.Password.RequiredUniqueChars = passwordPolicy.RequiredUniqueChars;
+        options.Password.RequireDigit = passwordPolicy.RequireDigit;
+        options.Password.RequireLowercase = passwordPolicy.RequireLowercase;
+        options.Password.RequireUppercase = passwordPolicy.RequireUppercase;
+        options.Password.RequireNonAlphanumeric = passwordPolicy.RequireNonAlphanumeric;
+
+        options.Lockout.MaxFailedAccessAttempts = passwordPolicy.MaxFailedAccessAttempts;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(passwordPolicy.DefaultLockoutMinutes);
+        options.Lockout.AllowedForNewUsers = true;
+
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddRoles<IdentityRole<Guid>>()
+    .AddEntityFrameworkStores<SafeHarborDbContext>()
+    .AddSignInManager();
 
 var localAuthEnabled = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
 var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
@@ -93,7 +119,6 @@ builder.Services.AddCors(options =>
 // Services Registration
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
-builder.Services.AddSingleton<ILocalAccountStore, InMemoryLocalAccountStore>();
 builder.Services.AddSingleton<InMemoryDataStore>();
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
@@ -180,6 +205,11 @@ var app = builder.Build();
 // See Infrastructure/DonorDashboardSeeder.cs for test credentials and amounts.
 // TODO: Remove once a real database with migration seeds is in place.
 DonorDashboardSeeder.Seed(app.Services.GetRequiredService<InMemoryDataStore>());
+
+if (localAuthEnabled)
+{
+    await IdentityDevelopmentSeeder.SeedAsync(app.Services);
+}
 
 if (app.Environment.IsDevelopment())
 {
