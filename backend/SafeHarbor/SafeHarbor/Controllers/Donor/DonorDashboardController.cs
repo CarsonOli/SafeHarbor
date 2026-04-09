@@ -64,7 +64,8 @@ public sealed class DonorDashboardController(IDonorDashboardService donorDashboa
             ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub");
 
-        var donorId = Guid.TryParse(objectIdValue, out var parsedDonorId) ? parsedDonorId : null;
+        // Explicit cast to nullable keeps the intent clear while avoiding Guid vs null inference issues.
+        var donorId = Guid.TryParse(objectIdValue, out var parsedDonorId) ? (Guid?)parsedDonorId : null;
         return (donorId, email);
     }
 }

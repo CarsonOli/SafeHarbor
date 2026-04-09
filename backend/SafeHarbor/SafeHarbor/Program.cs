@@ -2,6 +2,7 @@ using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore; 
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
@@ -226,7 +227,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // cloud egress IPs can rotate; in-production trust is bounded at the platform/network layer.
     if (!builder.Environment.IsDevelopment())
     {
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
     }
 });
