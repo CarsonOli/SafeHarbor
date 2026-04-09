@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminApi } from '../services/adminApi';
 
 const AdminContributionTable = () => {
@@ -22,6 +22,7 @@ const AdminContributionTable = () => {
   };
 
   const saveEdit = async () => {
+    if (!editingItem) return;
     try {
       // Ensure amount is a number before sending to .NET
       const updatedData = {
