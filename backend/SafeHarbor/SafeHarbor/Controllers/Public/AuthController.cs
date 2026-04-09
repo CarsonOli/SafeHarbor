@@ -131,15 +131,15 @@ public sealed class AuthController(
 }
 
 public sealed record LoginRequest(
-    [property: Required, EmailAddress] string Email,
-    [property: Required, MinLength(8)] string Password,
+    [param: Required, EmailAddress] string Email,
+    [param: Required, MinLength(8)] string Password,
     string? Role = null);
 
 public sealed record RegisterRequest(
-    [property: Required, EmailAddress] string Email,
-    [property: Required] string Role,
+    [param: Required, EmailAddress] string Email,
+    [param: Required] string Role,
     // NOTE: Base minimum-length validation is API-contract level; full complexity is enforced
     // in AuthService from configured PasswordPolicyOptions to avoid duplicating policy constants.
-    [property: Required, MinLength(8)] string Password);
+    [param: Required, MinLength(8)] string Password);
 public sealed record LoginResponse(string IdToken);
 public sealed record MeResponse(string Email, IReadOnlyCollection<string> Roles);
