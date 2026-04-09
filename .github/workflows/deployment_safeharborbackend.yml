@@ -52,6 +52,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: .net-app
+          path: .net-app
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -66,5 +67,6 @@ jobs:
         with:
           app-name: 'SafeHarborBackend'
           slot-name: 'Production'
-          package: .
+          # Deploy only the published output to avoid zipping workflow/repo metadata from the runner workspace.
+          package: .net-app
           
