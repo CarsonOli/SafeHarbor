@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore; 
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
@@ -157,6 +158,21 @@ builder.Services.AddControllers()
     });
 builder.Services.AddOpenApi();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // Cloud ingress/edge proxies terminate TLS and forward scheme/ip headers to the app.
+    // Enabling both headers keeps request metadata and HTTPS redirect behavior correct behind Azure/App Gateway.
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // NOTE: We intentionally clear known proxy restrictions only outside Development because
+    // cloud egress IPs can rotate; in-production trust is bounded at the platform/network layer.
+    if (!builder.Environment.IsDevelopment())
+    {
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+});
+
 var app = builder.Build();
 
 // Seed the in-memory store with test donors, a campaign, and contribution history.
@@ -177,7 +193,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseCors();
-//app.UseHttpsRedirection();
+// Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.
+app.UseForwardedHeaders();
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
