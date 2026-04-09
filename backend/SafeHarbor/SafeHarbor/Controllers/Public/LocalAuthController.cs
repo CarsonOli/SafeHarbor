@@ -1,10 +1,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using SafeHarbor.Auth;
+using SafeHarbor.DTOs;
 using SafeHarbor.Services.Auth;
 
 namespace SafeHarbor.Controllers.Public;
@@ -22,7 +24,7 @@ public sealed class LocalAuthController(
     {
         if (!IsLocalAuthEnabled())
         {
-            return NotFound(new { error = "Local authentication is disabled." });
+            return NotFound(CreateErrorEnvelope("FeatureDisabled", "Local authentication is disabled."));
         }
 
         var registerResult = await authService.RegisterAsync(
@@ -31,7 +33,10 @@ public sealed class LocalAuthController(
 
         if (!registerResult.Succeeded)
         {
-            return BadRequest(new { error = registerResult.Error ?? "Registration failed." });
+            var errorCode = registerResult.ErrorCode ?? "RegistrationFailed";
+            var message = registerResult.Error ?? "Registration failed.";
+            var statusCode = string.Equals(errorCode, "Conflict", StringComparison.Ordinal) ? StatusCodes.Status409Conflict : StatusCodes.Status400BadRequest;
+            return StatusCode(statusCode, CreateErrorEnvelope(errorCode, message));
         }
 
         return StatusCode(StatusCodes.Status201Created);
@@ -43,7 +48,7 @@ public sealed class LocalAuthController(
     {
         if (!IsLocalAuthEnabled())
         {
-            return NotFound(new { error = "Local authentication is disabled." });
+            return NotFound(CreateErrorEnvelope("FeatureDisabled", "Local authentication is disabled."));
         }
 
         var authResult = await authService.AuthenticateAsync(
@@ -52,7 +57,12 @@ public sealed class LocalAuthController(
 
         if (!authResult.Succeeded || authResult.Claims is null || authResult.Profile is null)
         {
-            return BadRequest(new { error = authResult.Error ?? "Invalid credentials." });
+            var errorCode = authResult.ErrorCode ?? "AuthenticationFailed";
+            var message = authResult.Error ?? "Invalid credentials.";
+            var statusCode = string.Equals(errorCode, "ForbiddenRole", StringComparison.Ordinal)
+                ? StatusCodes.Status403Forbidden
+                : StatusCodes.Status400BadRequest;
+            return StatusCode(statusCode, CreateErrorEnvelope(errorCode, message));
         }
 
         var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -61,7 +71,7 @@ public sealed class LocalAuthController(
         var signingKey = jwtOptions.SigningKey;
         if (string.IsNullOrWhiteSpace(signingKey))
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "JWT signing key is missing." });
+            return StatusCode(StatusCodes.Status500InternalServerError, CreateErrorEnvelope("ConfigurationError", "JWT signing key is missing."));
         }
 
         var now = DateTime.UtcNow;
@@ -114,9 +124,21 @@ public sealed class LocalAuthController(
     public Task<ActionResult<LoginResponse>> LocalLogin([FromBody] LoginRequest request, CancellationToken cancellationToken) => Login(request, cancellationToken);
 
     private bool IsLocalAuthEnabled() => environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled");
+
+    private ApiErrorEnvelope CreateErrorEnvelope(string errorCode, string message) =>
+        new(errorCode, message, HttpContext.TraceIdentifier);
 }
 
-public sealed record LoginRequest(string Email, string Password, string? Role = null);
-public sealed record RegisterRequest(string Email, string Role, string Password);
+public sealed record LoginRequest(
+    [property: Required, EmailAddress] string Email,
+    [property: Required, MinLength(8)] string Password,
+    string? Role = null);
+
+public sealed record RegisterRequest(
+    [property: Required, EmailAddress] string Email,
+    [property: Required] string Role,
+    // NOTE: Base minimum-length validation is API-contract level; full complexity is enforced
+    // in AuthService from configured PasswordPolicyOptions to avoid duplicating policy constants.
+    [property: Required, MinLength(8)] string Password);
 public sealed record LoginResponse(string IdToken);
 public sealed record MeResponse(string Email, IReadOnlyCollection<string> Roles);

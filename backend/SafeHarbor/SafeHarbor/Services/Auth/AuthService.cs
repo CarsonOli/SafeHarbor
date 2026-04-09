@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using SafeHarbor.Auth;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
 
@@ -11,28 +13,31 @@ namespace SafeHarbor.Services.Auth;
 /// </summary>
 public sealed class AuthService(
     SafeHarborDbContext dbContext,
-    IPasswordHasher<User> passwordHasher) : IAuthService
+    IPasswordHasher<User> passwordHasher,
+    IOptions<PasswordPolicyOptions> passwordPolicyOptions) : IAuthService
 {
     private static readonly HashSet<string> SupportedDatabaseRoles =
         ["admin", "staff", "user"];
+    private readonly PasswordPolicyOptions _passwordPolicy = passwordPolicyOptions.Value;
 
     public async Task<AuthRegisterResult> RegisterAsync(RegisterAuthRequest request, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(request.Email);
         if (string.IsNullOrWhiteSpace(normalizedEmail))
         {
-            return new AuthRegisterResult(false, "Email is required.");
+            return new AuthRegisterResult(false, "ValidationError", "Email is required.");
         }
 
         var normalizedRole = request.Role.Trim().ToLowerInvariant();
         if (!SupportedDatabaseRoles.Contains(normalizedRole))
         {
-            return new AuthRegisterResult(false, "Role must be one of: admin, staff, user.");
+            return new AuthRegisterResult(false, "ValidationError", "Role must be one of: admin, staff, user.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+        var passwordValidationError = ValidatePasswordAgainstPolicy(request.Password);
+        if (passwordValidationError is not null)
         {
-            return new AuthRegisterResult(false, "Password is required and must be at least 8 characters.");
+            return new AuthRegisterResult(false, "ValidationError", passwordValidationError);
         }
 
         // NOTE: Queries intentionally go through DbContext.Users which is schema-mapped to lighthouse.users
@@ -43,7 +48,7 @@ public sealed class AuthService(
 
         if (existingUser is not null)
         {
-            return new AuthRegisterResult(false, "An account already exists for this email.");
+            return new AuthRegisterResult(false, "Conflict", "An account already exists for this email.");
         }
 
         var user = new User
@@ -57,6 +62,7 @@ public sealed class AuthService(
             UpdatedAt = DateTime.UtcNow,
         };
 
+        // SECURITY: Only the framework-generated password hash is persisted; plaintext passwords are never stored.
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         dbContext.Users.Add(user);
@@ -70,7 +76,7 @@ public sealed class AuthService(
         var normalizedEmail = NormalizeEmail(request.Email);
         if (string.IsNullOrWhiteSpace(normalizedEmail) || string.IsNullOrWhiteSpace(request.Password))
         {
-            return new AuthAuthenticateResult(false, Error: "Email and password are required.");
+            return new AuthAuthenticateResult(false, ErrorCode: "ValidationError", Error: "Email and password are required.");
         }
 
         var user = await dbContext.Users
@@ -79,19 +85,19 @@ public sealed class AuthService(
 
         if (user is null)
         {
-            return new AuthAuthenticateResult(false, Error: "Invalid credentials.");
+            return new AuthAuthenticateResult(false, ErrorCode: "InvalidCredentials", Error: "Invalid credentials.");
         }
 
         var verification = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (verification == PasswordVerificationResult.Failed)
         {
-            return new AuthAuthenticateResult(false, Error: "Invalid credentials.");
+            return new AuthAuthenticateResult(false, ErrorCode: "InvalidCredentials", Error: "Invalid credentials.");
         }
 
         var mappedApiRoles = MapDatabaseRoleToApiRoles(user.Role);
         if (mappedApiRoles.Count == 0)
         {
-            return new AuthAuthenticateResult(false, Error: "Account role is not supported for API authorization.");
+            return new AuthAuthenticateResult(false, ErrorCode: "UnsupportedRole", Error: "Account role is not supported for API authorization.");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Role))
@@ -103,7 +109,7 @@ public sealed class AuthService(
             var requestMatchesMappedApiRole = mappedApiRoles.Contains(requestedRole, StringComparer.Ordinal);
             if (!requestMatchesDatabaseRole && !requestMatchesMappedApiRole)
             {
-                return new AuthAuthenticateResult(false, Error: "Requested role is not assigned to this account.");
+                return new AuthAuthenticateResult(false, ErrorCode: "ForbiddenRole", Error: "Requested role is not assigned to this account.");
             }
         }
 
@@ -131,6 +137,48 @@ public sealed class AuthService(
     }
 
     private static string NormalizeEmail(string? email) => (email ?? string.Empty).Trim().ToLowerInvariant();
+
+    private string? ValidatePasswordAgainstPolicy(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return "Password is required.";
+        }
+
+        if (password.Length < _passwordPolicy.RequiredLength)
+        {
+            return $"Password must be at least {_passwordPolicy.RequiredLength} characters.";
+        }
+
+        // NOTE: Complexity checks are optional and configuration-driven. This preserves architecture
+        // consistency with Identity policy settings while allowing lower-friction local development.
+        if (_passwordPolicy.RequireDigit && !password.Any(char.IsDigit))
+        {
+            return "Password must contain at least one number.";
+        }
+
+        if (_passwordPolicy.RequireLowercase && !password.Any(char.IsLower))
+        {
+            return "Password must contain at least one lowercase letter.";
+        }
+
+        if (_passwordPolicy.RequireUppercase && !password.Any(char.IsUpper))
+        {
+            return "Password must contain at least one uppercase letter.";
+        }
+
+        if (_passwordPolicy.RequireNonAlphanumeric && !password.Any(c => !char.IsLetterOrDigit(c)))
+        {
+            return "Password must contain at least one special character.";
+        }
+
+        if (_passwordPolicy.RequiredUniqueChars > 0 && password.Distinct().Count() < _passwordPolicy.RequiredUniqueChars)
+        {
+            return $"Password must contain at least {_passwordPolicy.RequiredUniqueChars} unique characters.";
+        }
+
+        return null;
+    }
 
     private static IReadOnlyCollection<string> MapDatabaseRoleToApiRoles(string role)
     {
