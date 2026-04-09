@@ -3,8 +3,7 @@ import { roles, type AppRole, type AuthSession, loadSession, persistSession } fr
 
 type AuthContextValue = {
   session: AuthSession | null
-  loginWithIdentityToken: (idToken: string) => AppRole
-  loginForDevelopment: (email: string, role: AppRole, idToken?: string) => void
+  loginWithToken: (idToken: string) => AppRole
   logout: () => void
 }
 
@@ -51,7 +50,7 @@ function resolveRoleFromClaims(claims: JwtClaims): AppRole {
   )
 
   if (!matchedRole) {
-    throw new Error('No supported Safe Harbor role claim was found in identity token.')
+    throw new Error('No supported Safe Harbor role claim was found in token.')
   }
 
   return matchedRole
@@ -60,7 +59,7 @@ function resolveRoleFromClaims(claims: JwtClaims): AppRole {
 function resolveEmailFromClaims(claims: JwtClaims): string {
   const email = claims.email ?? claims.preferred_username ?? claims.upn
   if (!email) {
-    throw new Error('No email claim was found in identity token.')
+    throw new Error('No email claim was found in token.')
   }
 
   return email
@@ -72,23 +71,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      loginWithIdentityToken: (idToken) => {
+      loginWithToken: (idToken) => {
         const claims = decodeJwtClaims(idToken)
-        // Derive authorization role from IdP claims so production access control does not
-        // depend on user-selected UI input.
+        // Derive authorization role from JWT claims so route access remains aligned
+        // with backend authorization rather than user-entered UI values.
         const role = resolveRoleFromClaims(claims)
         const email = resolveEmailFromClaims(claims)
         const nextSession = { email, role, idToken }
         setSession(nextSession)
         persistSession(nextSession)
         return role
-      },
-      loginForDevelopment: (email, role, idToken) => {
-        // NOTE: Local development auth can pass a backend-issued test token so
-        // API calls exercise the same bearer-token path used in production.
-        const nextSession = { email, role, idToken }
-        setSession(nextSession)
-        persistSession(nextSession)
       },
       logout: () => {
         setSession(null)
