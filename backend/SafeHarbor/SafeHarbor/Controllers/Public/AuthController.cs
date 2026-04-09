@@ -15,7 +15,6 @@ namespace SafeHarbor.Controllers.Public;
 [Route("api/auth")]
 public sealed class AuthController(
     IConfiguration configuration,
-    IWebHostEnvironment environment,
     IAuthService authService) : ControllerBase
 {
     [HttpPost("register")]
@@ -123,7 +122,9 @@ public sealed class AuthController(
     [AllowAnonymous]
     public Task<ActionResult<LoginResponse>> LocalLogin([FromBody] LoginRequest request, CancellationToken cancellationToken) => Login(request, cancellationToken);
 
-    private bool IsLocalAuthEnabled() => environment.IsDevelopment() && configuration.GetValue<bool>("LocalAuth:Enabled");
+    // Local auth availability is config-driven so staging/production can opt in explicitly
+    // for first-party email/password flows without requiring a Development environment.
+    private bool IsLocalAuthEnabled() => configuration.GetValue<bool>("LocalAuth:Enabled");
 
     private ApiErrorEnvelope CreateErrorEnvelope(string errorCode, string message) =>
         new(errorCode, message, HttpContext.TraceIdentifier);
