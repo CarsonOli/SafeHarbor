@@ -1,4 +1,4 @@
-import type { AppRole } from '../auth/authSession'
+import { mapAppRoleToDatabaseRole, type AppRole } from '../auth/authSession'
 
 const LOGIN_ENDPOINT = '/api/auth/login'
 const LOCAL_REGISTER_ENDPOINT = '/api/auth/register'
@@ -92,7 +92,12 @@ export async function requestLocalDevelopmentToken(email: string, password: stri
  * The backend stores accounts in-memory only, so this is intentionally local and ephemeral.
  */
 export async function registerLocalDevelopmentAccount(request: LocalRegisterRequest): Promise<void> {
-  const response = await postLocalAuthJson(LOCAL_REGISTER_ENDPOINT, request)
+  // Keep registration payloads on DB role vocabulary so backend storage and JWT role-mapping
+  // stay explicitly aligned with the persisted lighthouse.users role contract.
+  const response = await postLocalAuthJson(LOCAL_REGISTER_ENDPOINT, {
+    ...request,
+    role: mapAppRoleToDatabaseRole(request.role),
+  })
 
   if (!response.ok) {
     throw await readApiError(response, `Local account creation failed with status ${response.status}`)

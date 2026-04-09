@@ -50,6 +50,32 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
     }
 
     [Fact]
+    public async Task Login_DatabaseStaffRole_MapsToSocialWorkerClaimsAndKeepsDbRoleClaim()
+    {
+        using var client = _factory.CreateClient();
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { email = "staffclaims@example.com", role = "staff", password = "Password123!Aa" });
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { email = "staffclaims@example.com", password = "Password123!Aa" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<LoginEnvelope>();
+        Assert.NotNull(payload);
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(payload!.IdToken);
+        Assert.Contains(token.Claims, c => c.Type == "db_role" && c.Value == "staff");
+        Assert.Contains(token.Claims, c => c.Type == ClaimTypes.Role && c.Value == "SocialWorker");
+        Assert.Contains(token.Claims, c => c.Type == "role" && c.Value == "SocialWorker");
+        Assert.Contains(token.Claims, c => c.Type == "roles" && c.Value == "SocialWorker");
+    }
+
+    [Fact]
     public async Task Register_WeakPassword_ReturnsValidationError()
     {
         using var client = _factory.CreateClient();

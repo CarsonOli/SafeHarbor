@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react'
-import { roles, type AppRole, type AuthSession, loadSession, persistSession } from './authSession'
+import { normalizeRoleToAppRole, type AppRole, type AuthSession, loadSession, persistSession } from './authSession'
 
 type AuthContextValue = {
   session: AuthSession | null
@@ -45,9 +45,9 @@ function resolveRoleFromClaims(claims: JwtClaims): AppRole {
     candidateRoles.push(claims.role)
   }
 
-  const matchedRole = candidateRoles.find((candidateRole): candidateRole is AppRole =>
-    roles.includes(candidateRole as AppRole),
-  )
+  const matchedRole = candidateRoles
+    .map((candidateRole) => normalizeRoleToAppRole(candidateRole))
+    .find((candidateRole): candidateRole is AppRole => candidateRole !== null)
 
   if (!matchedRole) {
     throw new Error('No supported Safe Harbor role claim was found in token.')

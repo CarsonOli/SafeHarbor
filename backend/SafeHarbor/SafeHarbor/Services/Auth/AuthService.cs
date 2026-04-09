@@ -18,6 +18,20 @@ public sealed class AuthService(
 {
     private static readonly HashSet<string> SupportedDatabaseRoles =
         ["admin", "staff", "user"];
+
+    // NOTE: This alias map is the single source for accepted role vocabulary on inbound auth requests.
+    // It intentionally allows both DB role values (admin/staff/user) and app policy roles
+    // (Admin/SocialWorker/Donor) so existing frontend payloads remain compatible while preserving the
+    // DB->app mapping contract used by JWT claims and policy checks.
+    private static readonly Dictionary<string, string> RoleAliasToDatabaseRole = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["admin"] = "admin",
+        ["staff"] = "staff",
+        ["user"] = "user",
+        ["Admin"] = "admin",
+        ["SocialWorker"] = "staff",
+        ["Donor"] = "user"
+    };
     private readonly PasswordPolicyOptions _passwordPolicy = passwordPolicyOptions.Value;
 
     public async Task<AuthRegisterResult> RegisterAsync(RegisterAuthRequest request, CancellationToken cancellationToken = default)
@@ -28,8 +42,8 @@ public sealed class AuthService(
             return new AuthRegisterResult(false, "ValidationError", "Email is required.");
         }
 
-        var normalizedRole = request.Role.Trim().ToLowerInvariant();
-        if (!SupportedDatabaseRoles.Contains(normalizedRole))
+        var normalizedRole = NormalizeToDatabaseRole(request.Role);
+        if (normalizedRole is null || !SupportedDatabaseRoles.Contains(normalizedRole))
         {
             return new AuthRegisterResult(false, "ValidationError", "Role must be one of: admin, staff, user.");
         }
@@ -103,9 +117,10 @@ public sealed class AuthService(
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
             var requestedRole = request.Role.Trim();
-            var requestedDatabaseRole = requestedRole.ToLowerInvariant();
+            var requestedDatabaseRole = NormalizeToDatabaseRole(requestedRole);
 
-            var requestMatchesDatabaseRole = string.Equals(requestedDatabaseRole, user.Role, StringComparison.Ordinal);
+            var requestMatchesDatabaseRole = requestedDatabaseRole is not null
+                && string.Equals(requestedDatabaseRole, user.Role, StringComparison.Ordinal);
             var requestMatchesMappedApiRole = mappedApiRoles.Contains(requestedRole, StringComparer.Ordinal);
             if (!requestMatchesDatabaseRole && !requestMatchesMappedApiRole)
             {
@@ -137,6 +152,14 @@ public sealed class AuthService(
     }
 
     private static string NormalizeEmail(string? email) => (email ?? string.Empty).Trim().ToLowerInvariant();
+
+    private static string? NormalizeToDatabaseRole(string? inputRole)
+    {
+        var role = (inputRole ?? string.Empty).Trim();
+        return RoleAliasToDatabaseRole.TryGetValue(role, out var normalizedRole)
+            ? normalizedRole
+            : null;
+    }
 
     private string? ValidatePasswordAgainstPolicy(string? password)
     {
