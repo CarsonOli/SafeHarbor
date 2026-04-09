@@ -28,6 +28,7 @@ function App() {
           { to: '/app/process-recording', label: 'Process Recording' },
           { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
           { to: '/app/reports', label: 'Reports' },
+          { to: '/app/social-media', label: 'Social Media Strategy' },
           { to: '/privacy', label: 'Privacy' },
           { to: '/donate', label: 'Donate' },
         ]
