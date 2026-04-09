@@ -12,6 +12,11 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        # The backend solution lives under backend/SafeHarbor, so dotnet commands must run there.
+        # Without this, the workflow executes at repo root and fails to locate the project for build/publish.
+        working-directory: backend/SafeHarbor
     permissions:
       contents: read #This is required for actions/checkout
 
@@ -24,10 +29,10 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Build with dotnet
-        run: dotnet build --configuration Release
+        run: dotnet build SafeHarbor/SafeHarbor.csproj --configuration Release
 
       - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+        run: dotnet publish SafeHarbor/SafeHarbor.csproj -c Release -o "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
