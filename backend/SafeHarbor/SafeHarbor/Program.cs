@@ -1,10 +1,10 @@
+using System.Security.Claims;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore; 
-using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -45,6 +45,7 @@ builder.Services.AddDbContext<SafeHarborDbContext>(options =>
 
 var passwordPolicy = builder.Configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>()
     ?? new PasswordPolicyOptions();
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 
 builder.Services
     .AddIdentityCore<AppUser>(options =>
@@ -70,19 +71,42 @@ builder.Services
 
 var localAuthEnabled = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevelopmentFeatures:UseInMemoryDataStore");
-var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
+var issuer = jwtOptions.Issuer;
+var audience = jwtOptions.Audience;
+var signingKey = jwtOptions.SigningKey;
 
-if (localAuthEnabled)
+// Non-development environments must provide explicit JWT settings so startup fails fast
+// instead of silently accepting an invalid auth configuration.
+if (!builder.Environment.IsDevelopment()
+    && (string.IsNullOrWhiteSpace(issuer)
+        || string.IsNullOrWhiteSpace(audience)
+        || string.IsNullOrWhiteSpace(signingKey)))
 {
-    // Development-only JWT validation path. This keeps local auth deterministic while preserving
-    // the same bearer-token middleware used in production with Entra ID.
-    var issuer = builder.Configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
-    var audience = builder.Configuration["LocalAuth:Audience"] ?? "safeharbor-local-client";
-    var signingKey = builder.Configuration["LocalAuth:SigningKey"]
-        ?? throw new InvalidOperationException("LocalAuth:SigningKey is required when LocalAuth:Enabled=true.");
+    throw new InvalidOperationException("Jwt:Issuer, Jwt:Audience, and Jwt:SigningKey are required outside Development.");
+}
 
-    authBuilder.AddJwtBearer(options =>
+if (string.IsNullOrWhiteSpace(issuer))
+{
+    issuer = "safeharbor-local";
+}
+
+if (string.IsNullOrWhiteSpace(audience))
+{
+    audience = "safeharbor-local-client";
+}
+
+if (string.IsNullOrWhiteSpace(signingKey))
+{
+    signingKey = "development-signing-key-change-me";
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
+        // Keep claim mapping aligned with LocalAuthController token emission (ClaimTypes.Role + "role"/"roles")
+        // so role policies continue to work predictably across environments.
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -92,14 +116,11 @@ if (localAuthEnabled)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(signingKey)),
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1)
+            ClockSkew = TimeSpan.FromMinutes(1),
+            NameClaimType = "preferred_username",
+            RoleClaimType = ClaimTypes.Role
         };
     });
-}
-else
-{
-    authBuilder.AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-}
 
 builder.Services.AddAuthorization(options =>
 {
