@@ -364,6 +364,16 @@ select {
   font-weight: 600;
 }
 
+.form-success {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.auth-mode-toggle {
+  margin-top: var(--space-3);
+  width: 100%;
+}
+
 .divider {
   text-align: center;
   margin: var(--space-4) 0;

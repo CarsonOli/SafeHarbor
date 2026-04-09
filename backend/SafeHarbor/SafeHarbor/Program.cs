@@ -72,7 +72,9 @@ builder.Services
     .AddEntityFrameworkStores<SafeHarborDbContext>()
     .AddSignInManager();
 
-var localAuthEnabled = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
+// NOTE: Local auth is now controlled only by configuration so non-development demos
+// can enable email/password auth intentionally without code changes.
+var localAuthEnabled = builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevelopmentFeatures:UseInMemoryDataStore");
 var issuer = jwtOptions.Issuer;
 var audience = jwtOptions.Audience;
