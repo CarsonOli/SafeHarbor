@@ -14,8 +14,10 @@ using SafeHarbor.Authorization;
 using SafeHarbor.Data; 
 using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
+using SafeHarbor.Models.Entities;
 using SafeHarbor.Services;
 using SafeHarbor.Services.Admin;
+using SafeHarbor.Services.Auth;
 using SafeHarbor.Services.DonorImpact;
 using SafeHarbor.Services.Public;
 
@@ -183,6 +185,9 @@ builder.Services.AddScoped<IDonorAdminService, DonorAdminService>();
 builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
 builder.Services.AddScoped<IDonorDashboardService, DonorDashboardService>();
 builder.Services.AddScoped<IDonorAnalyticsService, DonorAnalyticsService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
 
 // Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
 // TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.
