@@ -10,61 +10,90 @@ namespace SafeHarbor.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "family_cooperation_level",
-                schema: "lighthouse",
-                table: "home_visits",
-                type: "text",
-                nullable: false,
-                defaultValue: "");
+            migrationBuilder.Sql(
+                """
+                DO $$
+                DECLARE
+                    target_schema text;
+                    target_table text;
+                BEGIN
+                    -- NOTE: Some deployments still use legacy relation names/schemas.
+                    -- Add columns only when a compatible home-visits table exists.
+                    SELECT table_schema, table_name
+                    INTO target_schema, target_table
+                    FROM information_schema.tables
+                    WHERE (table_schema, table_name) IN (
+                        ('lighthouse', 'home_visits'),
+                        ('lighthouse', 'HomeVisits'),
+                        ('public', 'home_visits'),
+                        ('public', 'HomeVisits')
+                    )
+                    ORDER BY CASE
+                        WHEN table_schema = 'lighthouse' AND table_name = 'home_visits' THEN 1
+                        WHEN table_schema = 'lighthouse' AND table_name = 'HomeVisits' THEN 2
+                        WHEN table_schema = 'public' AND table_name = 'home_visits' THEN 3
+                        ELSE 4
+                    END
+                    LIMIT 1;
 
-            migrationBuilder.AddColumn<string>(
-                name: "follow_up_actions",
-                schema: "lighthouse",
-                table: "home_visits",
-                type: "text",
-                nullable: false,
-                defaultValue: "");
+                    IF target_schema IS NULL OR target_table IS NULL THEN
+                        RAISE NOTICE 'Skipping AddHomeVisitDetailsFields: no home visits table found.';
+                        RETURN;
+                    END IF;
 
-            migrationBuilder.AddColumn<string>(
-                name: "home_environment_observations",
-                schema: "lighthouse",
-                table: "home_visits",
-                type: "text",
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<bool>(
-                name: "safety_concerns_identified",
-                schema: "lighthouse",
-                table: "home_visits",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
+                    EXECUTE format(
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS family_cooperation_level text NOT NULL DEFAULT '''''';',
+                        target_schema, target_table);
+                    EXECUTE format(
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS follow_up_actions text NOT NULL DEFAULT '''''';',
+                        target_schema, target_table);
+                    EXECUTE format(
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS home_environment_observations text NOT NULL DEFAULT '''''';',
+                        target_schema, target_table);
+                    EXECUTE format(
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS safety_concerns_identified boolean NOT NULL DEFAULT false;',
+                        target_schema, target_table);
+                END $$;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "family_cooperation_level",
-                schema: "lighthouse",
-                table: "home_visits");
+            migrationBuilder.Sql(
+                """
+                DO $$
+                DECLARE
+                    target_schema text;
+                    target_table text;
+                BEGIN
+                    SELECT table_schema, table_name
+                    INTO target_schema, target_table
+                    FROM information_schema.tables
+                    WHERE (table_schema, table_name) IN (
+                        ('lighthouse', 'home_visits'),
+                        ('lighthouse', 'HomeVisits'),
+                        ('public', 'home_visits'),
+                        ('public', 'HomeVisits')
+                    )
+                    ORDER BY CASE
+                        WHEN table_schema = 'lighthouse' AND table_name = 'home_visits' THEN 1
+                        WHEN table_schema = 'lighthouse' AND table_name = 'HomeVisits' THEN 2
+                        WHEN table_schema = 'public' AND table_name = 'home_visits' THEN 3
+                        ELSE 4
+                    END
+                    LIMIT 1;
 
-            migrationBuilder.DropColumn(
-                name: "follow_up_actions",
-                schema: "lighthouse",
-                table: "home_visits");
+                    IF target_schema IS NULL OR target_table IS NULL THEN
+                        RETURN;
+                    END IF;
 
-            migrationBuilder.DropColumn(
-                name: "home_environment_observations",
-                schema: "lighthouse",
-                table: "home_visits");
-
-            migrationBuilder.DropColumn(
-                name: "safety_concerns_identified",
-                schema: "lighthouse",
-                table: "home_visits");
+                    EXECUTE format('ALTER TABLE %I.%I DROP COLUMN IF EXISTS family_cooperation_level;', target_schema, target_table);
+                    EXECUTE format('ALTER TABLE %I.%I DROP COLUMN IF EXISTS follow_up_actions;', target_schema, target_table);
+                    EXECUTE format('ALTER TABLE %I.%I DROP COLUMN IF EXISTS home_environment_observations;', target_schema, target_table);
+                    EXECUTE format('ALTER TABLE %I.%I DROP COLUMN IF EXISTS safety_concerns_identified;', target_schema, target_table);
+                END $$;
+                """);
         }
     }
 }
