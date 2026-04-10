@@ -132,3 +132,73 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
   })
   return readJson<PagedResult<CaseConferenceItem>>(response, endpoint)
 }
+
+// ─── Resident Management (CRUD: Create & Update) ────────────────────────────
+
+export async function createResident(payload: any): Promise<void> {
+  const endpoint = '/api/admin/caseload/residents' // Matching your fetchResidentCases route
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+
+  await readJson<unknown>(response, endpoint, 'POST')
+}
+
+export async function updateResident(id: string, payload: any): Promise<void> {
+  const endpoint = `/api/admin/caseload/residents/${id}`
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'PUT',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+
+  await readJson<unknown>(response, endpoint, 'PUT')
+}
+
+export async function deleteResident(id: string): Promise<void> {
+  const endpoint = `/api/admin/caseload/residents/${id}`
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders({ Accept: 'application/json' }),
+  })
+
+  if (response.status !== 204 && response.status !== 200) {
+    await readJson<unknown>(response, endpoint, 'DELETE')
+  }
+}
+
+export async function createDonorProfile(payload: {
+  name: string;
+  email: string;
+  type: 'Monetary' | 'Volunteer' | 'Skills' | 'In-Kind';
+  status: 'Active' | 'Inactive';
+}): Promise<void> {
+  const endpoint = '/api/admin/donors-contributions/donors'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  await readJson<unknown>(response, endpoint, 'POST')
+}
+
+export async function updateDonorProfile(id: string, payload: any): Promise<void> {
+  const endpoint = `/api/admin/donors-contributions/donors/${id}`
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'PUT',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  await readJson<unknown>(response, endpoint, 'PUT')
+}
+
+export async function deleteDonorProfile(id: string): Promise<void> {
+  const endpoint = `/api/admin/donors-contributions/donors/${id}`
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders({ Accept: 'application/json' }),
+  })
+  if (response.status !== 204) await readJson<unknown>(response, endpoint, 'DELETE')
+}

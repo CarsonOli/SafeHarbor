@@ -5,6 +5,12 @@ import { toUserFacingError } from '../../services/httpErrors'
 import { ReadinessBadge } from '../../components/ReadinessBadge'
 import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
 import type { ResidentReadinessFlag } from '../../services/mlInsightsApi'
+import React from 'react'
+import { 
+  createResident, // Now available!
+  updateResident,
+  deleteResident  // Now available!
+} from '../../services/adminOperationsApi'
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -81,6 +87,8 @@ export function CaseloadInventoryPage() {
   const [safehouseId, setSafehouseId] = useState('')
   const [desc, setDesc] = useState(true)
   const [page, setPage] = useState(1)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedResident, setSelectedResident] = useState<any | null>(null);
   const PAGE_SIZE = 15
 
   // debounced search
@@ -155,6 +163,34 @@ export function CaseloadInventoryPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasFilters = !!(search || statusStateId || categoryId || safehouseId)
+  const handleSave = async (formData: any) => {
+    try {
+      const welfareData = `[Welfare Status: ${formData.socioStatus}] [Category: ${formData.category}] | Notes: ${formData.notes}`;
+
+      const payload = {
+        fullName: formData.fullName,
+        medicalNotes: welfareData,
+        dateOfBirth: "2000-01-01", // Placeholder for demo
+        caseWorkerEmail: "assigned@safeharbor.org"
+      };
+
+      if (selectedResident) {
+        await updateResident(selectedResident.id, payload);
+      } else {
+        await createResident(payload);
+      }
+
+      setIsModalOpen(false);
+      setSelectedResident(null);
+      
+      // This will refresh your list so the new data shows up immediately
+      window.location.reload(); 
+    } catch (err) {
+      // This utilizes your existing error handling structure
+      alert("Save failed. Make sure your C# API is running locally!");
+      console.error(err);
+    }
+  };
 
   return (
     <section>
@@ -164,6 +200,13 @@ export function CaseloadInventoryPage() {
           <h1 style={{ marginBottom: '0.25rem' }}>Caseload Inventory</h1>
           <p className="lead" style={{ margin: 0 }}>View, search, and manage resident cases, placement, and status.</p>
         </div>
+        <button 
+          className="button button-primary" 
+          onClick={() => setIsModalOpen(true)}
+          style={{ padding: '10px 20px' }}
+        >
+          Add New Resident
+        </button>
       </div>
 
       {/* ── Filter bar ── */}
@@ -272,9 +315,8 @@ export function CaseloadInventoryPage() {
               </tr>
             )}
             {items.map((item) => (
-              <>
+              <React.Fragment key={item.id}>
                 <tr
-                  key={item.id}
                   style={{
                     borderBottom: expandedId === item.id ? 'none' : '1px solid #f1f5f9',
                     background: expandedId === item.id ? '#f8fafc' : 'white',
@@ -318,10 +360,35 @@ export function CaseloadInventoryPage() {
                     >
                       {expandedId === item.id ? 'Close' : 'View'}
                     </button>
+                    <button
+                      onClick={() => {
+                        setSelectedResident(item);
+                        setIsModalOpen(true);
+                      }}
+                      style={{ ...viewButtonStyle, borderColor: '#0d9488', color: '#0d9488' }}
+                    >
+                      Edit
+                    </button>
+
+                    <button 
+                      onClick={async () => {
+                        if (window.confirm(`Are you sure you want to remove ${item.residentName}?`)) {
+                          try {
+                            await deleteResident(item.id);
+                            window.location.reload(); 
+                          } catch (err) {
+                            alert("Delete failed.");
+                          }
+                        }
+                      }}
+                      style={{ ...viewButtonStyle, borderColor: '#be123c', color: '#be123c' }}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
-                {expandedId === item.id && <CaseDetail key={`detail-${item.id}`} item={item} hasReadiness={readinessFlags.size > 0} />}
-              </>
+                {expandedId === item.id && <CaseDetail item={item} hasReadiness={readinessFlags.size > 0} />}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -347,9 +414,94 @@ export function CaseloadInventoryPage() {
           Next →
         </button>
       </div>
+
+      {/* ── Welfare Management Modal (CRUD: Create & Update) ── */}
+      {isModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            {/* Title changes dynamically based on if we are Creating or Updating */}
+            <h2 style={{ marginBottom: '1rem' }}>
+              {selectedResident ? `Edit ${selectedResident.residentName}` : 'Add New Resident'}
+            </h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Full Name</label>
+              <input 
+                placeholder="Full Name" 
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} 
+                defaultValue={selectedResident?.residentName || ''} 
+              />
+              
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Case Category</label>
+              <select 
+                style={{ padding: '8px' }} 
+                defaultValue={selectedResident?.category || ''}
+              >
+                <option value="">Select Category...</option>
+                <option>Trafficked</option>
+                <option>Victim of Physical Abuse</option>
+                <option>Neglected</option>
+                <option>Abandoned</option>
+              </select>
+
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Socio-Demographic Profile (Welfare Status)</label>
+              <select style={{ padding: '8px' }}>
+                <option>4Ps Beneficiary</option>
+                <option>Solo Parent</option>
+                <option>Indigenous Group</option>
+                <option>Informal Settler</option>
+                <option>None of the above</option>
+              </select>
+
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Medical & Case Notes</label>
+              <textarea 
+                placeholder="Enter detailed case notes here..." 
+                style={{ padding: '8px', minHeight: '100px', borderRadius: '4px', border: '1px solid #cbd5e1' }} 
+                defaultValue={selectedResident?.medicalNotes || ''}
+              />
+            </div>
+
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedResident(null); // Reset when canceling
+                }} 
+                className="button button-secondary"
+              >
+                Cancel
+              </button>
+
+              <button 
+                onClick={() => {
+                  // Grab the values from the modal inputs
+                  const fullName = (document.querySelector('input[placeholder="Full Name"]') as HTMLInputElement).value;
+                  const category = (document.querySelector('select:nth-of-type(1)') as HTMLSelectElement).value;
+                  const socio = (document.querySelector('select:nth-of-type(2)') as HTMLSelectElement).value;
+                  const notes = (document.querySelector('textarea') as HTMLTextAreaElement).value;
+
+                  handleSave({
+                    fullName,
+                    category,
+                    socioStatus: socio,
+                    notes
+                  });
+                }} 
+                className="button button-primary"
+              >
+                {selectedResident ? 'Save Changes' : 'Create Resident'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
-  )
+  );
 }
+  
 
 const thStyle: React.CSSProperties = {
   padding: '0.65rem 1rem',
@@ -364,4 +516,14 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '0.75rem 1rem',
   verticalAlign: 'middle',
+}
+
+const viewButtonStyle: React.CSSProperties = {
+  padding: '3px 12px',
+  fontSize: '0.8rem',
+  border: '1px solid #cbd5e1',
+  borderRadius: '5px',
+  background: 'white',
+  cursor: 'pointer',
+  marginLeft: '4px'
 }
