@@ -75,7 +75,9 @@ export const appRoutes = [
           },
           {
             path: 'process-recording',
-            element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
+            // Process recordings contain sensitive case notes and stay SocialWorker-only.
+            // This nested guard is intentionally narrower than the parent /app guard.
+            element: <ProtectedRoute allowedRoles={['SocialWorker']} />,
             children: [{ index: true, element: <ProcessRecordingPage /> }],
           },
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
