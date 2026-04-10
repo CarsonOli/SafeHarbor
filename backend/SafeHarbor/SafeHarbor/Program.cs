@@ -196,6 +196,9 @@ builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceSer
 builder.Services.AddScoped<IDonorContributionService, DonorContributionService>();
 builder.Services.AddScoped<IReportsAnalyticsService, ReportsAnalyticsService>();
 builder.Services.AddScoped<IImpactAggregateService, ImpactAggregateService>();
+builder.Services.AddScoped<IDonorRiskFlagService, DonorRiskFlagService>();
+builder.Services.AddScoped<IResidentReadinessFlagService, ResidentReadinessFlagService>();
+builder.Services.AddHttpClient("MlService");
 
 // NOTE: Live/ready probes support platform health checks and safer blue/green swaps.
 builder.Services.AddHealthChecks();

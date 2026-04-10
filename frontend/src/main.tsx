@@ -20,6 +20,7 @@ import { DonatePage } from './pages/DonatePage'
 import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 import AdminContributionsPage from './pages/app/AdminContributionsPage'
 import SocialMediaStrategy from './pages/SocialMediaStrategy'
+import { SocialMediaScorerPage } from './pages/app/SocialMediaScorerPage'
 
 export const appRoutes = [
   {
@@ -68,6 +69,11 @@ export const appRoutes = [
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
           { path: 'reports', element: <ReportsAnalyticsPage /> },
           { path: 'social-media', element: <SocialMediaStrategy /> },
+          {
+            path: 'social-media-scorer',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <SocialMediaScorerPage /> }],
+          },
         ],
       },
     ],

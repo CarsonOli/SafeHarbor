@@ -36,6 +36,7 @@ export type ResidentCaseListItem = {
   residentName: string | null
   openedAt: string
   closedAt: string | null
+  residentEntityId: string | null
 }
 
 export type ProcessRecordItem = {

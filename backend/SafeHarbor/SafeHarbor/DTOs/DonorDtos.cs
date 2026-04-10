@@ -21,7 +21,12 @@ public sealed record DonorAdminResponse(
     decimal LifetimeDonations,
     string PaymentToken,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    // ML risk fields — appended, nullable, populated by DonorAdminService.GetAllAsync
+    int ContributionCount = 0,
+    DateTimeOffset? LastContributionDate = null,
+    DateTimeOffset? FirstContributionDate = null,
+    int? UniqueChannels = null);
 
 public sealed record DonorPublicResponse(
     Guid Id,

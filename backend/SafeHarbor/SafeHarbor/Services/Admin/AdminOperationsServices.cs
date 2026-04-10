@@ -100,7 +100,8 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.CreatedBy,
                 x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
-                x.ClosedAt))
+                x.ClosedAt,
+                x.ResidentId))
             .ToArrayAsync(ct);
 
         return new PagedResult<ResidentCaseListItem>(items, page, pageSize, total);
@@ -191,7 +192,8 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.CreatedBy,
                 x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
-                x.ClosedAt))
+                x.ClosedAt,
+                x.ResidentId))
             .FirstAsync(ct);
     }
 }
