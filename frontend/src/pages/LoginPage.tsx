@@ -169,18 +169,6 @@ export function LoginPage() {
         )}
         {statusMessage && <p className="caption">{statusMessage}</p>}
 
-        {!LOCAL_AUTH_MODE_ENABLED && (
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={handleIdentityProviderSignIn}
-            disabled={!IDENTITY_PROVIDER_CONFIGURED}
-            title={!IDENTITY_PROVIDER_CONFIGURED ? 'Set VITE_AUTH_AUTHORIZE_URL and VITE_AUTH_CLIENT_ID in frontend/.env.local.' : undefined}
-          >
-            Sign in with Identity Provider
-          </button>
-        )}
-
         {(DEV_ROLE_SIMULATION_ENABLED || LOCAL_AUTH_MODE_ENABLED) && (
           <>
             {/*

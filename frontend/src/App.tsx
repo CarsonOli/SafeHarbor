@@ -86,10 +86,15 @@ function App() {
             </Link>
           </div>
           <div className="header-actions">
-            {session && (
+            {session ? (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})
               </button>
+            ) : (
+              /* Using button-secondary ensures it gets that light teal look */
+              <Link to="/login" className="button button-secondary">
+                Login
+              </Link>
             )}
           </div>
         </div>
@@ -112,9 +117,6 @@ function App() {
         <div className="side-nav-header">
           <p className="eyebrow">Navigation</p>
           {/* Keep CTA aligned with route guards: /donate is publicly accessible. */}
-          <Link to="/donate" className="button nav-donate-button" onClick={() => setIsMenuOpen(false)}>
-            Donate Now
-          </Link>
         </div>
         <ul className="side-nav-list">
           {navigation.map((item) => (
@@ -132,7 +134,7 @@ function App() {
         </ul>
       </nav>
 
-      <main id="main-content" className="container page-content" role="main">
+      <main id="main-content" className="main-wrapper container page-content" role="main">
         <Outlet />
       </main>
 

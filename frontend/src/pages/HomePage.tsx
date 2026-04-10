@@ -32,7 +32,14 @@ export function HomePage() {
             for girls who are survivors of sexual abuse and trafficking — because healing
             is possible.
           </p>
-          <div className="cta-row" style={{ justifyContent: 'center', marginTop: '2.5rem' }}>
+          <div className="cta-row" style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', // Added this to ensure vertical alignment
+              gap: '1.5rem',        // This handles the spacing between them
+              marginTop: '2.5rem',
+              width: '100%'         // Ensures the row spans the whole content area
+            }}>
             <Link to="/donate" className="button-donate-hero">
               Donate Now →
             </Link>
