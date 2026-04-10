@@ -197,9 +197,20 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
 
     public async Task<bool> DeleteResidentCaseAsync(Guid id, CancellationToken ct)
     {
-        var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var entity = await db.ResidentCases
+            .Include(x => x.ProcessRecordings)
+            .Include(x => x.HomeVisits)
+            .Include(x => x.CaseConferences)
+            .Include(x => x.Assessments)
+            .Include(x => x.InterventionPlans)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return false;
 
+        db.ProcessRecordings.RemoveRange(entity.ProcessRecordings);
+        db.HomeVisits.RemoveRange(entity.HomeVisits);
+        db.CaseConferences.RemoveRange(entity.CaseConferences);
+        db.ResidentAssessments.RemoveRange(entity.Assessments);
+        db.InterventionPlans.RemoveRange(entity.InterventionPlans);
         db.ResidentCases.Remove(entity);
         await db.SaveChangesAsync(ct);
         return true;
