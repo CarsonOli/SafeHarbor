@@ -1,10 +1,14 @@
 export class HttpError extends Error {
   readonly status: number
+  readonly endpoint?: string
+  readonly method?: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, options?: { endpoint?: string; method?: string }) {
     super(message)
     this.name = 'HttpError'
     this.status = status
+    this.endpoint = options?.endpoint
+    this.method = options?.method
   }
 }
 
@@ -18,6 +22,12 @@ export const NOT_AUTHORIZED_MESSAGE =
 export function toUserFacingError(error: unknown, fallbackMessage: string): string {
   if (error instanceof HttpError && error.status === 403) {
     return NOT_AUTHORIZED_MESSAGE
+  }
+
+  if (error instanceof HttpError) {
+    const method = error.method ?? 'REQUEST'
+    const endpoint = error.endpoint ?? 'unknown endpoint'
+    return `${fallbackMessage} (${method} ${endpoint} → HTTP ${error.status})`
   }
 
   if (error instanceof Error && error.message.trim().length > 0) {

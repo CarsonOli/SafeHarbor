@@ -30,6 +30,24 @@ Seeded local accounts are available for smoke testing:
 - `alice@example.com` / `Password123!` (Donor)
 - `admin@safeharbor.local` / `Password123!` (Admin)
 
+## API fallback policy (deployment safety)
+
+Frontend mock fallbacks are **dev-only and opt-in**. This prevents deployment builds from silently shipping fallback/mock payload behavior when backend endpoints fail.
+
+Current fallback flags:
+
+- `VITE_ENABLE_DONOR_DASHBOARD_DEV_FALLBACK`
+- `VITE_ENABLE_DONOR_ANALYTICS_DEV_FALLBACK`
+- `VITE_ENABLE_IMPACT_DEV_FALLBACK`
+
+Policy requirements:
+
+- Keep all fallback flags unset or `false` in CI/CD and deployed environments.
+- Only enable fallback flags in local development (`.env.local`) when intentionally running frontend without a backend.
+- If a backend endpoint is unavailable in deployed environments, UI should show an explicit API error (including endpoint + HTTP status) rather than rendering seeded/mock data.
+
+This policy ensures missing integrations are visible during QA and release validation.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

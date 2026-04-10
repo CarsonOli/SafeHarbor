@@ -117,19 +117,33 @@ export async function fetchImpactSummary(): Promise<ImpactSummary> {
     })
 
     if (!response.ok) {
-      throw new Error(`Impact endpoint returned ${response.status}`)
+      throw new HttpError(response.status, `Impact endpoint returned ${response.status}`, {
+        method: 'GET',
+        endpoint: IMPACT_ENDPOINT,
+      })
     }
 
     const data = (await response.json()) as ImpactSummary
     return data
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      throw error
+    }
+
     // NOTE: Mock fallback is intentionally opt-in for local development only.
     // Production/default behavior must surface backend outages to the UI.
     if (ENABLE_DEV_FALLBACK) {
       return fallbackImpactData
     }
 
-    throw new Error('Unable to load impact summary from backend API.')
+    if (error instanceof HttpError) {
+      throw error
+    }
+
+    throw new HttpError(0, 'Unable to load impact summary from backend API.', {
+      method: 'GET',
+      endpoint: IMPACT_ENDPOINT,
+    })
   }
 }
 
@@ -144,10 +158,13 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
 
     if (!response.ok) {
       if (response.status === 403) {
-        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE)
+        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE, { method: 'GET', endpoint: REPORTS_ENDPOINT })
       }
 
-      throw new HttpError(response.status, `Reports endpoint returned ${response.status}`)
+      throw new HttpError(response.status, `Reports endpoint returned ${response.status}`, {
+        method: 'GET',
+        endpoint: REPORTS_ENDPOINT,
+      })
     }
 
     return (await response.json()) as ReportsAnalyticsResponse
@@ -162,7 +179,14 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
       return fallbackReportsData
     }
 
-    throw new Error('Unable to load reports analytics from backend API.')
+    if (error instanceof HttpError) {
+      throw error
+    }
+
+    throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
+      method: 'GET',
+      endpoint: REPORTS_ENDPOINT,
+    })
   }
 }
 
@@ -175,7 +199,10 @@ export async function fetchSocialPostMetrics(): Promise<SocialPostMetricListItem
   })
 
   if (!response.ok) {
-    throw new Error(`Social post metrics endpoint returned ${response.status}`)
+    throw new HttpError(response.status, `Social post metrics endpoint returned ${response.status}`, {
+      method: 'GET',
+      endpoint: SOCIAL_METRICS_ENDPOINT,
+    })
   }
 
   return (await response.json()) as SocialPostMetricListItem[]
@@ -194,7 +221,10 @@ export async function createSocialPostMetric(
   })
 
   if (!response.ok) {
-    throw new Error(`Create social post metric endpoint returned ${response.status}`)
+    throw new HttpError(response.status, `Create social post metric endpoint returned ${response.status}`, {
+      method: 'POST',
+      endpoint: SOCIAL_METRICS_ENDPOINT,
+    })
   }
 
   return (await response.json()) as SocialPostMetricListItem

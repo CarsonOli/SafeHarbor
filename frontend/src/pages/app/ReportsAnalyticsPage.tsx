@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchReportsAnalytics } from '../../services/impactApi'
 import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { ReportsAnalyticsResponse, SocialDonationCorrelationPoint } from '../../types/impact'
 
 function formatCurrency(value: number): string {
@@ -99,7 +100,7 @@ export function ReportsAnalyticsPage() {
     return (
       <section>
         <h1>Reports & Analytics</h1>
-        <p role="alert">{error}</p>
+        <ApiErrorNotice error={error} />
       </section>
     )
   }

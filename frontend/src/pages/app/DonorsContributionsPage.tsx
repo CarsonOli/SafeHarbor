@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createDonor, fetchDonors } from '../../services/adminOperationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { DonorListItem } from '../../types/adminOperations'
 
 export function DonorsContributionsPage() {
@@ -79,7 +80,7 @@ export function DonorsContributionsPage() {
           placeholder="Filter by name or email"
         />
         {loading && <p role="status">Loading donors…</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && <ApiErrorNotice error={error} />}
         {success && <p role="status">{success}</p>}
         {!loading && !error && (
           <>
