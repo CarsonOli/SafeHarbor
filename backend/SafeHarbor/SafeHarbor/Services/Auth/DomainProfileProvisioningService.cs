@@ -85,8 +85,8 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
             Name = displayName,
             DisplayName = displayName,
             Email = normalizedEmail,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            UpdatedAtUtc = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
             LastActivityAt = DateTimeOffset.UtcNow,
             LifetimeDonations = 0m
         });
@@ -110,8 +110,8 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
                 ExternalId = userId.ToString(),
                 Email = normalizedEmail,
                 DisplayName = BuildDisplayName(normalizedEmail, firstName, lastName),
-                CreatedAtUtc = DateTimeOffset.UtcNow,
-                UpdatedAtUtc = DateTimeOffset.UtcNow
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
             };
             dbContext.UserProfiles.Add(profile);
         }
@@ -125,8 +125,8 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
             {
                 Id = Guid.NewGuid(),
                 Name = roleName,
-                CreatedAtUtc = DateTimeOffset.UtcNow,
-                UpdatedAtUtc = DateTimeOffset.UtcNow
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
             };
             dbContext.Roles.Add(role);
         }
