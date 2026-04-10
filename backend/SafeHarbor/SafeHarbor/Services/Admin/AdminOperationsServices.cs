@@ -51,83 +51,101 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
 {
     public async Task<PagedResult<ResidentCaseListItem>> GetResidentsAsync(PagingQuery query, CancellationToken ct)
     {
-        var q = db.ResidentCases.AsNoTracking()
-            .Include(x => x.Safehouse)
-            .Include(x => x.CaseCategory)
-            .Include(x => x.StatusState)
-            .Include(x => x.Resident)
-            .AsQueryable();
-
-        if (query.SafehouseId is { } safehouseId)
-        {
-            q = q.Where(x => x.SafehouseId == safehouseId);
-        }
-
-        if (query.StatusStateId is { } statusStateId)
-        {
-            q = q.Where(x => x.StatusStateId == statusStateId);
-        }
-
-        if (query.CategoryId is { } categoryId)
-        {
-            q = q.Where(x => x.CaseCategoryId == categoryId);
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim().ToLower();
-            q = q.Where(x =>
-                (x.Safehouse != null && x.Safehouse.Name.ToLower().Contains(search)) ||
-                (x.CaseCategory != null && x.CaseCategory.Name.ToLower().Contains(search)) ||
-                (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)) ||
-                (x.Resident != null && x.Resident.FullName.ToLower().Contains(search)));
-        }
-
-        q = query.Desc ? q.OrderByDescending(x => x.OpenedAt) : q.OrderBy(x => x.OpenedAt);
-
-        var total = await q.CountAsync(ct);
         var page = query.NormalizedPage;
         var pageSize = query.NormalizedPageSize;
 
-        var items = await q.Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new ResidentCaseListItem(
-                x.Id,
-                x.SafehouseId,
-                x.Safehouse != null ? x.Safehouse.Name : "Unknown",
-                x.CaseCategoryId,
-                x.CaseCategory != null ? x.CaseCategory.Name : "Unknown",
-                x.StatusStateId,
-                x.StatusState != null ? x.StatusState.Name : "Unknown",
-                x.CreatedBy,
-                x.Resident != null ? x.Resident.FullName : null,
-                x.OpenedAt,
-                x.ClosedAt,
-                x.ResidentId))
-            .ToArrayAsync(ct);
+        try
+        {
+            var q = db.ResidentCases.AsNoTracking()
+                .Include(x => x.Safehouse)
+                .Include(x => x.CaseCategory)
+                .Include(x => x.StatusState)
+                .Include(x => x.Resident)
+                .AsQueryable();
 
-        return new PagedResult<ResidentCaseListItem>(items, page, pageSize, total);
+            if (query.SafehouseId is { } safehouseId)
+            {
+                q = q.Where(x => x.SafehouseId == safehouseId);
+            }
+
+            if (query.StatusStateId is { } statusStateId)
+            {
+                q = q.Where(x => x.StatusStateId == statusStateId);
+            }
+
+            if (query.CategoryId is { } categoryId)
+            {
+                q = q.Where(x => x.CaseCategoryId == categoryId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                var search = query.Search.Trim().ToLower();
+                q = q.Where(x =>
+                    (x.Safehouse != null && x.Safehouse.Name.ToLower().Contains(search)) ||
+                    (x.CaseCategory != null && x.CaseCategory.Name.ToLower().Contains(search)) ||
+                    (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)) ||
+                    (x.Resident != null && x.Resident.FullName.ToLower().Contains(search)));
+            }
+
+            q = query.Desc ? q.OrderByDescending(x => x.OpenedAt) : q.OrderBy(x => x.OpenedAt);
+
+            var total = await q.CountAsync(ct);
+            var items = await q.Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ResidentCaseListItem(
+                    x.Id,
+                    x.SafehouseId,
+                    x.Safehouse != null ? x.Safehouse.Name : "Unknown",
+                    x.CaseCategoryId,
+                    x.CaseCategory != null ? x.CaseCategory.Name : "Unknown",
+                    x.StatusStateId,
+                    x.StatusState != null ? x.StatusState.Name : "Unknown",
+                    x.CreatedBy,
+                    x.Resident != null ? x.Resident.FullName : null,
+                    x.OpenedAt,
+                    x.ClosedAt,
+                    x.ResidentId))
+                .ToArrayAsync(ct);
+
+            return new PagedResult<ResidentCaseListItem>(items, page, pageSize, total);
+        }
+        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
+        {
+            // NOTE: Caseload pages should still render in partially-migrated environments.
+            // Returning an empty page avoids hard 500s while operators reconcile schema drift.
+            return new PagedResult<ResidentCaseListItem>([], page, pageSize, 0);
+        }
     }
 
     public async Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct)
     {
-        var safehouses = await db.Safehouses.AsNoTracking()
-            .OrderBy(x => x.Name)
-            .Select(x => new CaseloadSafehouseItem(x.Id.ToString(), x.Name))
-            .ToArrayAsync(ct);
+        try
+        {
+            var safehouses = await db.Safehouses.AsNoTracking()
+                .OrderBy(x => x.Name)
+                .Select(x => new CaseloadSafehouseItem(x.Id.ToString(), x.Name))
+                .ToArrayAsync(ct);
 
-        var categories = await db.CaseCategories.AsNoTracking()
-            .OrderBy(x => x.Name)
-            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
-            .ToArrayAsync(ct);
+            var categories = await db.CaseCategories.AsNoTracking()
+                .OrderBy(x => x.Name)
+                .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+                .ToArrayAsync(ct);
 
-        var statuses = await db.StatusState.AsNoTracking()
-            .Where(x => x.Domain == StatusDomain.ResidentCase)
-            .OrderBy(x => x.Name)
-            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
-            .ToArrayAsync(ct);
+            var statuses = await db.StatusState.AsNoTracking()
+                .Where(x => x.Domain == StatusDomain.ResidentCase)
+                .OrderBy(x => x.Name)
+                .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+                .ToArrayAsync(ct);
 
-        return new CaseloadLookupsResponse(safehouses, categories, statuses);
+            return new CaseloadLookupsResponse(safehouses, categories, statuses);
+        }
+        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
+        {
+            // NOTE: Keep filters available as empty sets when lookup tables are missing,
+            // so frontend can show a controlled empty-state instead of crashing on 500.
+            return new CaseloadLookupsResponse([], [], []);
+        }
     }
 
     public async Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct)
@@ -198,6 +216,9 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.ResidentId))
             .FirstAsync(ct);
     }
+
+    private static bool IsMissingCaseloadSchema(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
 }
 
 public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRecordingService
