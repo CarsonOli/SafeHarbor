@@ -299,13 +299,27 @@ export function DonorsContributionsPage() {
                 onClick={() => {
                   // These selectors find the values in the modal you just filled out
                   const name = (document.querySelector('input[placeholder="Donor Name"]') as HTMLInputElement).value;
-                  const type = (document.querySelector('select:nth-of-type(1)') as HTMLSelectElement).value;
-                  const status = (document.querySelector('select:nth-of-type(2)') as HTMLSelectElement).value;
+                  const typeValue = (document.querySelector('select:nth-of-type(1)') as HTMLSelectElement).value;
+                  const statusValue = (document.querySelector('select:nth-of-type(2)') as HTMLSelectElement).value;
+
+                  // Keep UI labels mapped to the constrained API contract values.
+                  const typeMap: Record<string, DonorProfileUpsertPayload['type']> = {
+                    'Monetary Donor': 'Monetary',
+                    'Volunteer (Time)': 'Volunteer',
+                    'Skills Contributor': 'Skills',
+                    'In-Kind (Goods)': 'In-Kind',
+                    Monetary: 'Monetary',
+                    Volunteer: 'Volunteer',
+                    Skills: 'Skills',
+                    'In-Kind': 'In-Kind',
+                  };
+                  const normalizedType = typeMap[typeValue] ?? 'Monetary';
+                  const normalizedStatus: DonorProfileUpsertPayload['status'] = statusValue === 'Inactive' ? 'Inactive' : 'Active';
 
                   handleSaveDonor({
                     name,
-                    type,
-                    status,
+                    type: normalizedType,
+                    status: normalizedStatus,
                     email: selectedDonation?.supporterEmail || 'new@donor.org'
                   });
                 }} 
