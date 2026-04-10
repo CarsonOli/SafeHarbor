@@ -73,6 +73,14 @@ export type CaseConferenceItem = {
   outcomeSummary: string
 }
 
+export type CaseloadLookupItem = { id: number; name: string }
+export type CaseloadSafehouseItem = { id: string; name: string }
+export type CaseloadLookupsResponse = {
+  safehouses: CaseloadSafehouseItem[]
+  caseCategories: CaseloadLookupItem[]
+  statusStates: CaseloadLookupItem[]
+}
+
 export type ApiErrorEnvelope = {
   errorCode: string
   message: string

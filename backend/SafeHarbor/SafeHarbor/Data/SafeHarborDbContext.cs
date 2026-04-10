@@ -20,7 +20,8 @@ namespace SafeHarbor.Data
         // NOTE: These shadow IdentityDbContext's Role/UserRole sets because we map to app-specific entities.
         public new DbSet<Role> Roles { get; set; }          
         public new DbSet<UserRole> UserRoles { get; set; }
-        public DbSet<StatusState> StatusState { get; set; } 
+        public DbSet<StatusState> StatusState { get; set; }
+        public DbSet<CaseCategory> CaseCategories { get; set; }
 
         // --- The Rest of the 17 ---
         public DbSet<Resident> Residents { get; set; }

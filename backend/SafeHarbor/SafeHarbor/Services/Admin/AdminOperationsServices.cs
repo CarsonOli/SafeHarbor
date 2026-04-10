@@ -2,12 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Models.Entities;
+using SafeHarbor.Models.Enums;
 
 namespace SafeHarbor.Services.Admin;
 
 public interface ICaseloadInventoryService
 {
     Task<PagedResult<ResidentCaseListItem>> GetResidentsAsync(PagingQuery query, CancellationToken ct);
+    Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct);
     Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct);
     Task<ResidentCaseListItem?> UpdateResidentCaseAsync(Guid id, UpdateResidentCaseRequest request, CancellationToken ct);
     Task<bool> DeleteResidentCaseAsync(Guid id, CancellationToken ct);
@@ -73,7 +75,8 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             q = q.Where(x =>
                 (x.Safehouse != null && x.Safehouse.Name.ToLower().Contains(search)) ||
                 (x.CaseCategory != null && x.CaseCategory.Name.ToLower().Contains(search)) ||
-                (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)));
+                (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)) ||
+                (x.Resident != null && x.Resident.FullName.ToLower().Contains(search)));
         }
 
         q = query.Desc ? q.OrderByDescending(x => x.OpenedAt) : q.OrderBy(x => x.OpenedAt);
@@ -99,6 +102,27 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             .ToArrayAsync(ct);
 
         return new PagedResult<ResidentCaseListItem>(items, page, pageSize, total);
+    }
+
+    public async Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct)
+    {
+        var safehouses = await db.Safehouses.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadSafehouseItem(x.Id.ToString(), x.Name))
+            .ToArrayAsync(ct);
+
+        var categories = await db.CaseCategories.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+            .ToArrayAsync(ct);
+
+        var statuses = await db.StatusState.AsNoTracking()
+            .Where(x => x.Domain == StatusDomain.ResidentCase)
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+            .ToArrayAsync(ct);
+
+        return new CaseloadLookupsResponse(safehouses, categories, statuses);
     }
 
     public async Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct)

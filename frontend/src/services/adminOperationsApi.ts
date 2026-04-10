@@ -4,6 +4,7 @@ import type {
   PagingQuery,
   DonorListItem,
   ResidentCaseListItem,
+  CaseloadLookupsResponse,
   ProcessRecordItem,
   HomeVisitItem,
   CaseConferenceItem,
@@ -49,6 +50,13 @@ export async function createDonor(name: string, email: string): Promise<void> {
   })
 
   await readJson<unknown>(response)
+}
+
+export async function fetchCaseloadLookups(): Promise<CaseloadLookupsResponse> {
+  const response = await fetch(`${API_BASE}/api/admin/caseload/lookups`, {
+    headers: buildAuthHeaders({ Accept: 'application/json' }),
+  })
+  return readJson<CaseloadLookupsResponse>(response)
 }
 
 export async function fetchResidentCases(query: PagingQuery): Promise<PagedResult<ResidentCaseListItem>> {

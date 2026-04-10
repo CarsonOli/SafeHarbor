@@ -11,6 +11,10 @@ namespace SafeHarbor.Controllers.Admin;
 [Authorize(Policy = PolicyNames.StaffOrAdmin)]
 public sealed class CaseloadInventoryController(ICaseloadInventoryService caseloadService) : ControllerBase
 {
+    [HttpGet("lookups")]
+    public async Task<ActionResult<CaseloadLookupsResponse>> GetLookups(CancellationToken ct)
+        => Ok(await caseloadService.GetLookupsAsync(ct));
+
     [HttpGet("residents")]
     public async Task<ActionResult<PagedResult<ResidentCaseListItem>>> GetResidents([FromQuery] PagingQuery query, CancellationToken ct)
     {

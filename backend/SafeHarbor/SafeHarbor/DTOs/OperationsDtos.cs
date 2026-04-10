@@ -12,6 +12,13 @@ public sealed record ContributionListItem(Guid Id, string DonorName, decimal Amo
 public sealed record ConferenceListItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
 public sealed record OutcomeSummaryItem(DateOnly SnapshotDate, int TotalResidentsServed, int TotalHomeVisits, decimal TotalContributions);
 
+public sealed record CaseloadLookupItem(int Id, string Name);
+public sealed record CaseloadSafehouseItem(string Id, string Name);
+public sealed record CaseloadLookupsResponse(
+    IReadOnlyCollection<CaseloadSafehouseItem> Safehouses,
+    IReadOnlyCollection<CaseloadLookupItem> CaseCategories,
+    IReadOnlyCollection<CaseloadLookupItem> StatusStates);
+
 public sealed record DonorListItem(Guid Id, string Name, string Email, DateTimeOffset LastActivityAt, decimal LifetimeContributions);
 public sealed record CreateDonorRequest([property: Required, StringLength(120, MinimumLength = 2)] string Name, [property: Required, EmailAddress] string Email);
 
