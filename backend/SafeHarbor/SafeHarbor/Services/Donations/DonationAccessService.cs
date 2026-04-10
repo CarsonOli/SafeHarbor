@@ -11,6 +11,7 @@ public interface IDonationAccessService
     Task<PagedResult<DonationListItem>> GetAllDonationsAsync(DonationFiltersQuery filters, CancellationToken ct);
     Task<DonationListItem?> GetDonationByIdAsync(long donationId, CancellationToken ct);
     Task<YourDonationsResponse> GetCurrentUserDonationsAsync(Guid userId, CancellationToken ct);
+    Task<long?> CreateDonationForCurrentUserAsync(Guid userId, string? email, decimal amount, string? frequency, CancellationToken ct);
     Task<bool> LinkUserToSupporterAsync(Guid userId, long supporterId, CancellationToken ct);
     Task<long?> FindSupporterByEmailAsync(string email, CancellationToken ct);
     Task<long?> EnsureSupporterForEmailAsync(string email, string? firstName, string? lastName, CancellationToken ct);
@@ -57,6 +58,91 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
         var supporterDisplayName = donations.FirstOrDefault()?.DonorDisplayName;
         return new YourDonationsResponse(true, user.SupporterId, supporterDisplayName, donations);
+    }
+
+    public async Task<long?> CreateDonationForCurrentUserAsync(Guid userId, string? email, decimal amount, string? frequency, CancellationToken ct)
+    {
+        if (amount <= 0)
+        {
+            return null;
+        }
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var supporterId = user.SupporterId;
+        if (supporterId is null && !string.IsNullOrWhiteSpace(email))
+        {
+            supporterId = await EnsureSupporterForEmailAsync(email, user.FirstName, user.LastName, ct);
+            if (supporterId is not null)
+            {
+                user.SupporterId = supporterId;
+                user.UpdatedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(ct);
+            }
+        }
+
+        if (supporterId is null)
+        {
+            return null;
+        }
+
+        await using var conn = await OpenConnectionAsync(ct);
+        const string insertSql = """
+            WITH resolved_id AS (
+                SELECT CASE
+                    WHEN pg_get_serial_sequence('lighthouse.donations', 'donation_id') IS NOT NULL
+                        THEN nextval(pg_get_serial_sequence('lighthouse.donations', 'donation_id'))
+                    ELSE (
+                        SELECT COALESCE(MAX(donation_id), 0) + 1
+                        FROM lighthouse.donations
+                    )
+                END AS donation_id
+            )
+            INSERT INTO lighthouse.donations
+                (donation_id, supporter_id, donation_date, donation_type, amount, frequency, channel_source)
+            SELECT
+                resolved_id.donation_id,
+                @supporter_id,
+                @donation_date,
+                @donation_type,
+                @amount,
+                @frequency,
+                @channel_source
+            FROM resolved_id
+            RETURNING donation_id
+            """;
+
+        try
+        {
+            var donationId = await ExecuteScalarAsync<object?>(
+                conn,
+                insertSql,
+                new Dictionary<string, object>
+                {
+                    ["supporter_id"] = supporterId.Value,
+                    ["donation_date"] = DateTime.UtcNow,
+                    ["donation_type"] = "Cash",
+                    ["amount"] = amount,
+                    ["frequency"] = string.IsNullOrWhiteSpace(frequency) ? "One-time" : frequency.Trim(),
+                    ["channel_source"] = "Web",
+                },
+                ct);
+
+            return donationId is null || donationId is DBNull ? null : Convert.ToInt64(donationId);
+        }
+        catch (PostgresException ex) when (
+            ex.SqlState == PostgresErrorCodes.UndefinedTable ||
+            ex.SqlState == PostgresErrorCodes.UndefinedColumn ||
+            ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        {
+            // NOTE: Keep donation submission non-fatal in environments with divergent
+            // donation schemas; caller can decide whether to fall back to legacy flow.
+            return null;
+        }
     }
 
     public async Task<bool> LinkUserToSupporterAsync(Guid userId, long supporterId, CancellationToken ct)
@@ -125,28 +211,65 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
         // NOTE: We always create a CRM supporter profile before linking auth users so donation
         // ownership stays tied to supporters, not directly to auth account rows.
+        // Some environments define supporters.supporter_id without a default sequence, so we
+        // defensively generate an ID when needed.
         var fallbackName = BuildSupporterDisplayName(normalizedEmail, firstName, lastName);
         await using var conn = await OpenConnectionAsync(ct);
         const string insertSql = """
-            INSERT INTO lighthouse.supporters (display_name, first_name, last_name, email, supporter_type)
-            VALUES (@display_name, @first_name, @last_name, @email, @supporter_type)
+            WITH resolved_id AS (
+                SELECT CASE
+                    WHEN pg_get_serial_sequence('lighthouse.supporters', 'supporter_id') IS NOT NULL
+                        THEN nextval(pg_get_serial_sequence('lighthouse.supporters', 'supporter_id'))
+                    ELSE (
+                        SELECT COALESCE(MAX(supporter_id), 0) + 1
+                        FROM lighthouse.supporters
+                    )
+                END AS supporter_id
+            )
+            INSERT INTO lighthouse.supporters (supporter_id, display_name, first_name, last_name, email, supporter_type, relationship_type)
+            SELECT
+                resolved_id.supporter_id,
+                @display_name,
+                @first_name,
+                @last_name,
+                @email,
+                @supporter_type,
+                @relationship_type
+            FROM resolved_id
             RETURNING supporter_id
             """;
 
-        var created = await ExecuteScalarAsync<object?>(
-            conn,
-            insertSql,
-            new Dictionary<string, object>
-            {
-                ["display_name"] = fallbackName,
-                ["first_name"] = string.IsNullOrWhiteSpace(firstName) ? DBNull.Value : firstName.Trim(),
-                ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
-                ["email"] = normalizedEmail,
-                ["supporter_type"] = "Individual",
-            },
-            ct);
+        try
+        {
+            var created = await ExecuteScalarAsync<object?>(
+                conn,
+                insertSql,
+                new Dictionary<string, object>
+                {
+                    ["display_name"] = fallbackName,
+                    ["first_name"] = string.IsNullOrWhiteSpace(firstName) ? DBNull.Value : firstName.Trim(),
+                    ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
+                    ["email"] = normalizedEmail,
+                    ["supporter_type"] = "Individual",
+                    ["relationship_type"] = "Donor",
+                },
+                ct);
 
-        return created is null || created is DBNull ? null : Convert.ToInt64(created);
+            return created is null || created is DBNull ? null : Convert.ToInt64(created);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Concurrent registration can race the insert for the same email; resolve by
+            // reading the supporter row that just won the unique constraint.
+            return await FindSupporterByEmailAsync(normalizedEmail, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        {
+            // NOTE: Some production supporter schemas require additional non-null columns
+            // outside the baseline contract. Registration must still succeed for auth users
+            // even when supporter auto-provisioning cannot satisfy every tenant-specific field.
+            return null;
+        }
     }
 
     private async Task<IReadOnlyCollection<DonationListItem>> ReadDonationsAsync(

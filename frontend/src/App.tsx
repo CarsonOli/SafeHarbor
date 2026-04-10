@@ -78,13 +78,14 @@ function App() {
             {/* Added Link wrapper and Logo Image */}
             <Link to="/" className="brand-link" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none', position: 'relative', zIndex: 10 }}>
               <img 
-                src="/favicon.png"  /* We know this file works because your tab icon works! */
+                src="/favicon.png"
                 alt="Safe Harbor Logo" 
+                width="38"   /* Explicit width for Lighthouse CLS */
+                height="38"  /* Explicit height for Lighthouse CLS */
                 style={{ 
                   height: '38px', 
                   width: 'auto',
                   display: 'inline-block',
-                  /* Temporarily removed the filter to ensure it's visible */
                 }} 
               />
               <div className="brand" aria-label="Safe Harbor" style={{ color: '#2a5c5c' }}>
@@ -93,10 +94,15 @@ function App() {
             </Link>
           </div>
           <div className="header-actions">
-            {session && (
+            {session ? (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})
               </button>
+            ) : (
+              /* Using button-secondary ensures it gets that light teal look */
+              <Link to="/login" className="button button-secondary">
+                Login
+              </Link>
             )}
           </div>
         </div>
@@ -119,9 +125,6 @@ function App() {
         <div className="side-nav-header">
           <p className="eyebrow">Navigation</p>
           {/* Keep CTA aligned with route guards: /donate is publicly accessible. */}
-          <Link to="/donate" className="button nav-donate-button" onClick={() => setIsMenuOpen(false)}>
-            Donate Now
-          </Link>
         </div>
         <ul className="side-nav-list">
           {navigation.map((item) => (
@@ -139,7 +142,7 @@ function App() {
         </ul>
       </nav>
 
-      <main id="main-content" className="container page-content" role="main">
+      <main id="main-content" className="main-wrapper container page-content" role="main">
         <Outlet />
       </main>
 
