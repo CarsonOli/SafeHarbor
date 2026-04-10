@@ -66,8 +66,12 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
 
     private async Task EnsureDonorAsync(string normalizedEmail, string? firstName, string? lastName, CancellationToken cancellationToken)
     {
-        var existingDonor = await dbContext.Donors
-            .FirstOrDefaultAsync(d => d.Email.ToLower() == normalizedEmail, cancellationToken);
+        // NOTE: Reconciliation can stage multiple inserts in one unit-of-work; we must check tracked
+        // additions first so repeated emails in the same run remain idempotent before SaveChanges.
+        var existingDonor = dbContext.Donors.Local
+            .FirstOrDefault(d => string.Equals(d.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            ?? await dbContext.Donors
+                .FirstOrDefaultAsync(d => d.Email.ToLower() == normalizedEmail, cancellationToken);
 
         if (existingDonor is not null)
         {
@@ -90,8 +94,13 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
 
     private async Task EnsureStaffProfileAsync(Guid userId, string normalizedEmail, string databaseRole, string? firstName, string? lastName, CancellationToken cancellationToken)
     {
-        var profile = await dbContext.UserProfiles
-            .FirstOrDefaultAsync(p => p.ExternalId == userId.ToString() || p.Email.ToLower() == normalizedEmail, cancellationToken);
+        var externalId = userId.ToString();
+        var profile = dbContext.UserProfiles.Local
+            .FirstOrDefault(p =>
+                string.Equals(p.ExternalId, externalId, StringComparison.Ordinal)
+                || string.Equals(p.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            ?? await dbContext.UserProfiles
+                .FirstOrDefaultAsync(p => p.ExternalId == externalId || p.Email.ToLower() == normalizedEmail, cancellationToken);
 
         if (profile is null)
         {
@@ -108,7 +117,8 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
         }
 
         var roleName = string.Equals(databaseRole, "admin", StringComparison.Ordinal) ? "Admin" : "SocialWorker";
-        var role = await dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
+        var role = dbContext.Roles.Local.FirstOrDefault(r => string.Equals(r.Name, roleName, StringComparison.Ordinal))
+            ?? await dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken);
         if (role is null)
         {
             role = new Role
