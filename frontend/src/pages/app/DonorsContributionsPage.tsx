@@ -8,6 +8,7 @@ import {
   updateDonorProfile, 
   deleteDonorProfile 
 } from '../../services/adminOperationsApi'
+import type { DonorProfileUpsertPayload } from '../../services/adminOperationsApi'
 // ... rest of your imports
 
 function formatCurrency(amount: number): string {
@@ -72,7 +73,7 @@ export function DonorsContributionsPage() {
     }
   }, [filters, page, pageSize])
 
-  const handleSaveDonor = async (formData: any) => {
+  const handleSaveDonor = async (formData: DonorProfileUpsertPayload) => {
     try {
       if (selectedDonation) {
         // UPDATE
