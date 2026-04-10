@@ -265,6 +265,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+// Apply any pending EF Core migrations on startup so the database schema stays in sync
+// with the deployed code. MigrateAsync is idempotent — it checks __EFMigrationsHistory
+// and only runs migrations that haven't been applied yet.
+if (!useInMemoryPersistence)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 if (useInMemoryPersistence)
 {
     // Seed dev-only in-memory data only when the explicit feature flag is enabled.
