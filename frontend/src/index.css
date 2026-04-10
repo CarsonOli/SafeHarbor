@@ -58,6 +58,9 @@ body {
   width: 100%;
   /* Change this from 800px or 600px to 1200px or even 1400px */
   max-width: 1200px; 
+  width: 100%;
+  /* Change this from 800px or 600px to 1200px or even 1400px */
+  max-width: 1200px; 
   margin: 0 auto;
   padding: 0 2rem; /* Keeps a small "breathing room" on the edges */
 }
@@ -1355,6 +1358,7 @@ select {
     max-width: 480px;
     margin: 0 auto;
   }
+}
 
   .notebook-card {
     transform: rotate(0deg) !important;
@@ -1363,7 +1367,7 @@ select {
   .notebook-card:hover {
     transform: translateY(-6px) !important;
   }
-}
+
 
 .main-wrapper {
   margin-top: 100px !important; /* Forces the gap even if other styles resist */
