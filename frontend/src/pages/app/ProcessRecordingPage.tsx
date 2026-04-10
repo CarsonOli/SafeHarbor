@@ -80,6 +80,82 @@ function MultiSelectCheckboxes({
   )
 }
 
+function ResidentPickerModal({
+  residentCases,
+  onSelect,
+  onClose,
+}: {
+  residentCases: ResidentCaseListItem[]
+  onSelect: (id: string, name: string) => void
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const filtered = search.trim()
+    ? residentCases.filter((c) =>
+        (c.residentName ?? '').toLowerCase().includes(search.toLowerCase()) ||
+        c.id.toLowerCase().includes(search.toLowerCase())
+      )
+    : residentCases
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#fff', borderRadius: '10px', width: 'min(520px, 95vw)', maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: '1rem 1.25rem 0.75rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong style={{ fontSize: '1rem' }}>Select Resident</strong>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '0.75rem 1.25rem' }}>
+          <input
+            autoFocus
+            placeholder="Search by name or case ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: '100%' }}
+          />
+        </div>
+
+        {/* Scrollable list */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '0 0.75rem 0.75rem' }}>
+          {filtered.length === 0 ? (
+            <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1.5rem 0', fontSize: '0.9rem' }}>No residents found.</p>
+          ) : (
+            filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onSelect(c.id, c.residentName ?? 'Unknown Resident')}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '0.65rem 0.75rem', marginBottom: '2px',
+                  border: '1px solid transparent', borderRadius: '6px',
+                  background: 'none', cursor: 'pointer', fontSize: '0.9rem',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#f1f5f9' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+              >
+                <span style={{ fontWeight: 600, color: '#1e293b' }}>{c.residentName ?? 'Unknown Resident'}</span>
+                <span style={{ color: '#64748b', fontSize: '0.82rem', marginLeft: '0.5rem' }}>
+                  {c.safehouse} · {c.status}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Badge({ label, color }: { label: string; color: string }) {
   return (
     <span style={{
@@ -149,7 +225,6 @@ export function ProcessRecordingPage() {
 
   const emptyForm = useMemo(() => ({
     residentCaseId: '',
-    residentSearch: '',
     sessionDate: new Date().toISOString().slice(0, 10),
     socialWorker: session?.email ?? '',
     sessionType: 'Individual',
@@ -179,6 +254,8 @@ export function ProcessRecordingPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
+  const [selectedResidentName, setSelectedResidentName] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -216,13 +293,6 @@ export function ProcessRecordingPage() {
     return () => { cancelled = true }
   }, [query])
 
-  const filteredResidents = form.residentSearch.trim()
-    ? residentCases.filter((c) =>
-        (c.residentName ?? '').toLowerCase().includes(form.residentSearch.toLowerCase()) ||
-        c.safehouse.toLowerCase().includes(form.residentSearch.toLowerCase())
-      )
-    : residentCases
-
   const visibleItems = filterSessionType ? items.filter((i) => i.sessionType === filterSessionType) : items
 
   function setField<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
@@ -231,6 +301,7 @@ export function ProcessRecordingPage() {
 
   function openForm() {
     setForm({ ...emptyForm, socialWorker: session?.email ?? '' })
+    setSelectedResidentName('')
     setShowForm(true)
     setError(null)
     setSuccess(null)
@@ -282,6 +353,17 @@ export function ProcessRecordingPage() {
 
   return (
     <section>
+      {showPicker && (
+        <ResidentPickerModal
+          residentCases={residentCases}
+          onSelect={(id, name) => {
+            setField('residentCaseId', id)
+            setSelectedResidentName(name)
+            setShowPicker(false)
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Counseling Logs</h1>
@@ -302,34 +384,34 @@ export function ProcessRecordingPage() {
 
           {sectionLabel('Session Details')}
           <div style={{ marginBottom: '0.75rem' }}>
-            <label htmlFor="pr-resident-search">Resident</label>
-            <input
-              id="pr-resident-search"
-              placeholder="Type to search by name or safehouse…"
-              value={form.residentSearch}
-              onChange={(e) => setField('residentSearch', e.target.value)}
-              style={{ marginBottom: '0.4rem' }}
-            />
-            <select
-              id="pr-resident-select"
-              value={form.residentCaseId}
-              onChange={(e) => setField('residentCaseId', e.target.value)}
-              required
-              size={Math.min(6, filteredResidents.length + 1)}
-              style={{ width: '100%' }}
-            >
-              <option value="">— Select a resident —</option>
-              {filteredResidents.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.residentName ?? 'Unknown Resident'} — {c.safehouse} ({c.status})
-                </option>
-              ))}
-            </select>
-            {form.residentCaseId && (
-              <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
-                Case ID: {form.residentCaseId}
-              </p>
-            )}
+            <label>Resident</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                style={{
+                  padding: '0.45rem 1rem',
+                  border: '1px solid var(--color-border, #cadce0)',
+                  borderRadius: '6px',
+                  background: form.residentCaseId ? 'var(--color-secondary, #d9e8e8)' : '#f8fafc',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  color: form.residentCaseId ? 'var(--color-primary, #2a5c5c)' : '#64748b',
+                  fontWeight: form.residentCaseId ? 600 : 400,
+                }}
+              >
+                {form.residentCaseId ? selectedResidentName : '+ Select Resident'}
+              </button>
+              {form.residentCaseId && (
+                <button
+                  type="button"
+                  onClick={() => { setField('residentCaseId', ''); setSelectedResidentName('') }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
