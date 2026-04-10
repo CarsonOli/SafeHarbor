@@ -500,7 +500,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         var statusName = await ResolveLegacyStatusNameAsync(request.StatusStateId, ct) ?? "Unknown";
         var openedAt = (request.OpenedAt ?? DateTimeOffset.UtcNow).UtcDateTime;
         var createdAt = DateTime.UtcNow;
-        var internalCode = $"AUTO-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+        var generatedCode = $"AUTO-{Guid.NewGuid().ToString("N")[..12].ToUpperInvariant()}";
 
         var residentIdColumn = await GetColumnMetadataAsync("lighthouse", "residents", "resident_id", ct);
         var parameters = new Dictionary<string, object>
@@ -510,7 +510,8 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             ["case_status"] = statusName,
             ["date_of_admission"] = openedAt,
             ["created_at"] = createdAt,
-            ["internal_code"] = internalCode,
+            ["case_control_no"] = generatedCode,
+            ["internal_code"] = generatedCode,
             ["assigned_social_worker"] = "system"
         };
 
@@ -529,6 +530,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 """
                 INSERT INTO lighthouse.residents (
                     resident_id,
+                    case_control_no,
                     safehouse_id,
                     case_category,
                     case_status,
@@ -539,6 +541,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 )
                 VALUES (
                     @resident_id,
+                    @case_control_no,
                     @safehouse_id,
                     @case_category,
                     @case_status,
@@ -555,6 +558,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             insertSql =
                 """
                 INSERT INTO lighthouse.residents (
+                    case_control_no,
                     safehouse_id,
                     case_category,
                     case_status,
@@ -564,6 +568,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                     assigned_social_worker
                 )
                 VALUES (
+                    @case_control_no,
                     @safehouse_id,
                     @case_category,
                     @case_status,
