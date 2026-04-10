@@ -140,14 +140,15 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
                     )
                 END AS supporter_id
             )
-            INSERT INTO lighthouse.supporters (supporter_id, display_name, first_name, last_name, email, supporter_type)
+            INSERT INTO lighthouse.supporters (supporter_id, display_name, first_name, last_name, email, supporter_type, relationship_type)
             SELECT
                 resolved_id.supporter_id,
                 @display_name,
                 @first_name,
                 @last_name,
                 @email,
-                @supporter_type
+                @supporter_type,
+                @relationship_type
             FROM resolved_id
             RETURNING supporter_id
             """;
@@ -164,6 +165,7 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
                     ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
                     ["email"] = normalizedEmail,
                     ["supporter_type"] = "Individual",
+                    ["relationship_type"] = "Donor",
                 },
                 ct);
 
@@ -174,6 +176,13 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
             // Concurrent registration can race the insert for the same email; resolve by
             // reading the supporter row that just won the unique constraint.
             return await FindSupporterByEmailAsync(normalizedEmail, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        {
+            // NOTE: Some production supporter schemas require additional non-null columns
+            // outside the baseline contract. Registration must still succeed for auth users
+            // even when supporter auto-provisioning cannot satisfy every tenant-specific field.
+            return null;
         }
     }
 
