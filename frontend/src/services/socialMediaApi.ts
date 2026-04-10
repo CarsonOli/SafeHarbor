@@ -29,11 +29,26 @@ export interface PostScoreResponse {
 
 export async function scorePost(request: PostScoreRequest): Promise<PostScoreResponse> {
   const endpoint = '/api/admin/social-media/score-post'
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method:  'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-    body:    JSON.stringify(request),
-  })
+  let res: Response
+
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, {
+      method:  'POST',
+      headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+      body:    JSON.stringify(request),
+    })
+  } catch (error) {
+    // NOTE: Fetch throws before an HTTP response exists when the browser cannot reach the API at all,
+    // so we raise a more actionable message than the default "Failed to fetch".
+    if (error instanceof TypeError) {
+      throw new Error(
+        'Unable to reach the social media scoring API. Start the backend and ML service, or set VITE_API_BASE_URL to the API host.'
+      )
+    }
+
+    throw error
+  }
+
   if (!res.ok) {
     if (res.status === 403) throw new HttpError(403, NOT_AUTHORIZED_MESSAGE, { endpoint, method: 'POST' })
     throw new HttpError(res.status, `Request failed with status ${res.status}`, { endpoint, method: 'POST' })
