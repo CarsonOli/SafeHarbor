@@ -135,7 +135,14 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
 
 // ─── Resident Management (CRUD: Create & Update) ────────────────────────────
 
-export async function createResident(payload: any): Promise<void> {
+export type ResidentUpsertPayload = {
+  fullName: string
+  medicalNotes: string
+  dateOfBirth: string
+  caseWorkerEmail: string
+}
+
+export async function createResident(payload: ResidentUpsertPayload): Promise<void> {
   const endpoint = '/api/admin/caseload/residents'
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
@@ -145,7 +152,7 @@ export async function createResident(payload: any): Promise<void> {
   await readJson<unknown>(response, endpoint, 'POST')
 }
 
-export async function updateResident(id: string, payload: any): Promise<void> {
+export async function updateResident(id: string, payload: ResidentUpsertPayload): Promise<void> {
   const endpoint = `/api/admin/caseload/residents/${id}`
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'PUT',
@@ -206,12 +213,14 @@ export async function createCaseConference(payload: {
 
 // ─── Donor Profiles (CRUD) ──────────────────────────────────────────────────
 
-export async function createDonorProfile(payload: {
+export type DonorProfileUpsertPayload = {
   name: string;
   email: string;
   type: 'Monetary' | 'Volunteer' | 'Skills' | 'In-Kind';
   status: 'Active' | 'Inactive';
-}): Promise<void> {
+}
+
+export async function createDonorProfile(payload: DonorProfileUpsertPayload): Promise<void> {
   const endpoint = '/api/admin/donors-contributions/donors'
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
@@ -221,7 +230,7 @@ export async function createDonorProfile(payload: {
   await readJson<unknown>(response, endpoint, 'POST')
 }
 
-export async function updateDonorProfile(id: string, payload: any): Promise<void> {
+export async function updateDonorProfile(id: string, payload: DonorProfileUpsertPayload): Promise<void> {
   const endpoint = `/api/admin/donors-contributions/donors/${id}`
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'PUT',

@@ -6,6 +6,7 @@ import {
   createResident, 
   updateResident 
 } from '../../services/adminOperationsApi'
+import type { ResidentUpsertPayload } from '../../services/adminOperationsApi'
 // This was the missing link causing the red line in your useEffect!
 import { fetchResidentReadinessFlags } from '../../services/mlInsightsApi' 
 import { toUserFacingError } from '../../services/httpErrors'
@@ -104,6 +105,13 @@ function CaseDetail({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function CaseloadInventoryPage() {
+  type ResidentFormData = {
+    fullName: string
+    socioStatus: string
+    category: string
+    notes: string
+  }
+
   const { session } = useAuth()
   const isAdmin = session?.role === 'Admin'
 
@@ -126,7 +134,7 @@ export function CaseloadInventoryPage() {
   const [desc, setDesc] = useState(true)
   const [page, setPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedResident, setSelectedResident] = useState<any | null>(null);
+  const [selectedResident, setSelectedResident] = useState<ResidentCaseListItem | null>(null);
   const PAGE_SIZE = 15
 
   // debounced search
@@ -216,11 +224,11 @@ export function CaseloadInventoryPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasFilters = !!(search || statusStateId || categoryId || safehouseId)
-  const handleSave = async (formData: any) => {
+  const handleSave = async (formData: ResidentFormData) => {
     try {
       const welfareData = `[Welfare Status: ${formData.socioStatus}] [Category: ${formData.category}] | Notes: ${formData.notes}`;
 
-      const payload = {
+      const payload: ResidentUpsertPayload = {
         fullName: formData.fullName,
         medicalNotes: welfareData,
         dateOfBirth: "2000-01-01", // Placeholder for demo
