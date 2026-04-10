@@ -53,8 +53,9 @@ public sealed class DonationAccessService(
             return new YourDonationsResponse(false, null, null, []);
         }
 
-        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value);
         await using var conn = await OpenConnectionAsync(ct);
+        var hasFrequencyColumn = await ColumnExistsAsync(conn, "lighthouse", "donations", "frequency", ct);
+        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value, hasFrequencyColumn);
         var donations = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
 
         var supporterDisplayName = donations.FirstOrDefault()?.DonorDisplayName;
@@ -489,17 +490,49 @@ public sealed class DonationAccessService(
         return (sql, new Dictionary<string, object> { ["donation_id"] = donationId });
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(long supporterId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(
+        long supporterId,
+        bool hasFrequencyColumn)
     {
         // The "Your Donations" page is an account ledger view, so it must return complete
         // supporter history rather than paginated admin-style slices.
+        // NOTE: Some production datasets are missing donations.frequency; emit NULL when absent.
+        var frequencyProjection = hasFrequencyColumn ? "d.frequency" : "NULL::text AS frequency";
         var sql = $$"""
             {{BaseDonationProjection()}}
             WHERE d.supporter_id = @supporter_id
             ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC, i.item_id
             """;
+        sql = sql.Replace("d.frequency,", $"{frequencyProjection},", StringComparison.Ordinal);
 
         return (sql, new Dictionary<string, object> { ["supporter_id"] = supporterId });
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        NpgsqlConnection conn,
+        string schema,
+        string table,
+        string column,
+        CancellationToken ct)
+    {
+        const string sql = """
+            SELECT EXISTS (
+              SELECT 1
+              FROM information_schema.columns
+              WHERE table_schema = @schema AND table_name = @table AND column_name = @column
+            )
+            """;
+
+        return await ExecuteScalarAsync<bool>(
+            conn,
+            sql,
+            new Dictionary<string, object>
+            {
+                ["schema"] = schema,
+                ["table"] = table,
+                ["column"] = column
+            },
+            ct);
     }
 
     private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
