@@ -15,7 +15,6 @@ import { ProcessRecordingPage } from './pages/app/ProcessRecordingPage'
 import { HomeVisitationConferencesPage } from './pages/app/HomeVisitationConferencesPage'
 import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
-import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
 import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 import AdminContributionsPage from './pages/app/AdminContributionsPage'
@@ -68,11 +67,6 @@ export const appRoutes = [
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
           { path: 'donors', element: <DonorsContributionsPage /> },
-          {
-            path: 'donor-analytics',
-            element: <ProtectedRoute allowedRoles={['Admin']} />,
-            children: [{ index: true, element: <AdminDonorAnalyticsPage /> }],
-          },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
           {
             path: 'contributions',

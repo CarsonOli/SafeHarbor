@@ -11,7 +11,6 @@ export type AppNavRoute = {
 export const appNavRoutes: AppNavRoute[] = [
   { to: '/app/dashboard', label: 'Admin Dashboard', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/donors', label: 'Donations', roles: ['Admin', 'SocialWorker'] },
-  { to: '/app/donor-analytics', label: 'Donor Analytics', roles: ['Admin'] },
   { to: '/app/caseload', label: 'Caseload', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/contributions', label: 'Manage Contributions', roles: ['Admin'] },
   { to: '/app/process-recording', label: 'Process Recording', roles: ['SocialWorker'] },

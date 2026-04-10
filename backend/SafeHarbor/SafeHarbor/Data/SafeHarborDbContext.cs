@@ -199,6 +199,10 @@ namespace SafeHarbor.Data
                 entity.Property(e => e.VisitTypeId).HasColumnName("visit_type_id");
                 entity.Property(e => e.StatusStateId).HasColumnName("status_state_id");
                 entity.Property(e => e.VisitDate).HasColumnName("visit_date");
+                entity.Property(e => e.HomeEnvironmentObservations).HasColumnName("home_environment_observations");
+                entity.Property(e => e.FamilyCooperationLevel).HasColumnName("family_cooperation_level");
+                entity.Property(e => e.SafetyConcernsIdentified).HasColumnName("safety_concerns_identified");
+                entity.Property(e => e.FollowUpActions).HasColumnName("follow_up_actions");
                 entity.Property(e => e.Notes).HasColumnName("notes");
                 MapAuditColumns(entity);
             });

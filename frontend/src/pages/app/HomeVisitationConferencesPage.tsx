@@ -18,11 +18,25 @@ const STATUS_OPTIONS = [
   { id: 3, name: 'Closed' },
 ]
 
+const VISIT_TYPE_OPTIONS = [
+  { id: 1, name: 'Initial Assessment' },
+  { id: 2, name: 'Routine Follow-up' },
+  { id: 3, name: 'Reintegration Assessment' },
+  { id: 4, name: 'Post-placement Monitoring' },
+  { id: 5, name: 'Emergency' },
+]
+
+const FAMILY_COOPERATION_OPTIONS = ['Low', 'Moderate', 'High']
+
 const EMPTY_VISIT_FORM = {
   residentCaseId: '',
   visitTypeId: 1,
   statusStateId: 1,
   visitDate: '',
+  homeEnvironmentObservations: '',
+  familyCooperationLevel: 'Moderate',
+  safetyConcernsIdentified: false,
+  followUpActions: '',
   notes: '',
 }
 
@@ -203,7 +217,7 @@ export function HomeVisitationConferencesPage() {
     <section>
       <p className="eyebrow">Operations</p>
       <h1>Home Visitation &amp; Case Conferences</h1>
-      <p className="lead">Log new visits and conferences, and browse existing records below.</p>
+      <p className="lead">Log home and field visits with assessment details, and review conference history and upcoming schedules for each resident case.</p>
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
@@ -240,7 +254,7 @@ export function HomeVisitationConferencesPage() {
                 Visit Type
                 <select style={inputStyle} value={visitForm.visitTypeId}
                   onChange={e => setVisitForm(f => ({ ...f, visitTypeId: Number(e.target.value) }))}>
-                  <option value={1}>Home Visit</option>
+                  {VISIT_TYPE_OPTIONS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </label>
 
@@ -259,6 +273,37 @@ export function HomeVisitationConferencesPage() {
               </label>
 
               <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
+                Home Environment Observations
+                <textarea style={{ ...inputStyle, minHeight: '72px', resize: 'vertical' }}
+                  value={visitForm.homeEnvironmentObservations}
+                  onChange={e => setVisitForm(f => ({ ...f, homeEnvironmentObservations: e.target.value }))} />
+              </label>
+
+              <label style={labelStyle}>
+                Family Cooperation Level
+                <select style={inputStyle} value={visitForm.familyCooperationLevel}
+                  onChange={e => setVisitForm(f => ({ ...f, familyCooperationLevel: e.target.value }))}>
+                  {FAMILY_COOPERATION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+
+              <label style={labelStyle}>
+                Safety Concerns
+                <select style={inputStyle} value={visitForm.safetyConcernsIdentified ? 'yes' : 'no'}
+                  onChange={e => setVisitForm(f => ({ ...f, safetyConcernsIdentified: e.target.value === 'yes' }))}>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </label>
+
+              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
+                Follow-up Actions
+                <textarea style={{ ...inputStyle, minHeight: '72px', resize: 'vertical' }}
+                  value={visitForm.followUpActions}
+                  onChange={e => setVisitForm(f => ({ ...f, followUpActions: e.target.value }))} />
+              </label>
+
+              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
                 Notes
                 <textarea style={{ ...inputStyle, minHeight: '72px', resize: 'vertical' }}
                   value={visitForm.notes}
@@ -267,7 +312,7 @@ export function HomeVisitationConferencesPage() {
             </div>
             <button className="button button-primary" type="submit" disabled={submitting}
               style={{ marginTop: '1rem' }}>
-              {submitting ? 'Saving…' : 'Save Visit'}
+              {submitting ? 'Saving...' : 'Save Visit'}
             </button>
           </form>
         </div>
@@ -309,7 +354,7 @@ export function HomeVisitationConferencesPage() {
             </div>
             <button className="button button-primary" type="submit" disabled={submitting}
               style={{ marginTop: '1rem' }}>
-              {submitting ? 'Saving…' : 'Save Conference'}
+              {submitting ? 'Saving...' : 'Save Conference'}
             </button>
           </form>
         </div>
@@ -352,7 +397,11 @@ export function HomeVisitationConferencesPage() {
                     <tr>
                       <th style={thStyle}>Date</th>
                       <th style={thStyle}>Type</th>
+                      <th style={thStyle}>Family Cooperation</th>
+                      <th style={thStyle}>Safety Concerns</th>
                       <th style={thStyle}>Status</th>
+                      <th style={thStyle}>Home Environment</th>
+                      <th style={thStyle}>Follow-up Actions</th>
                       <th style={thStyle}>Notes</th>
                     </tr>
                   </thead>
@@ -361,8 +410,12 @@ export function HomeVisitationConferencesPage() {
                       <tr key={v.id}>
                         <td style={tdStyle}>{fmt(v.visitDate)}</td>
                         <td style={tdStyle}>{v.visitType}</td>
+                        <td style={tdStyle}>{v.familyCooperationLevel || '-'}</td>
+                        <td style={tdStyle}>{v.safetyConcernsIdentified ? 'Yes' : 'No'}</td>
                         <td style={tdStyle}>{v.status}</td>
-                        <td style={{ ...tdStyle, color: '#64748b' }}>{v.notes || '—'}</td>
+                        <td style={{ ...tdStyle, color: '#64748b' }}>{v.homeEnvironmentObservations || '-'}</td>
+                        <td style={{ ...tdStyle, color: '#64748b' }}>{v.followUpActions || '-'}</td>
+                        <td style={{ ...tdStyle, color: '#64748b' }}>{v.notes || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

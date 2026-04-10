@@ -138,6 +138,10 @@ export async function createHomeVisit(payload: {
   visitTypeId: number
   statusStateId: number
   visitDate: string
+  homeEnvironmentObservations?: string
+  familyCooperationLevel?: string
+  safetyConcernsIdentified?: boolean
+  followUpActions?: string
   notes: string
 }): Promise<HomeVisitItem> {
   const endpoint = '/api/admin/visitation-conferences/visits'

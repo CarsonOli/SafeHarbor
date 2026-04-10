@@ -104,7 +104,17 @@ public sealed record CreateProcessRecordRequest(
     string? NotesRestricted,
     DateTimeOffset? RecordedAt);
 
-public sealed record HomeVisitItem(Guid Id, Guid ResidentCaseId, DateTimeOffset VisitDate, string VisitType, string Status, string Notes);
+public sealed record HomeVisitItem(
+    Guid Id,
+    Guid ResidentCaseId,
+    DateTimeOffset VisitDate,
+    string VisitType,
+    string Status,
+    string HomeEnvironmentObservations,
+    string FamilyCooperationLevel,
+    bool SafetyConcernsIdentified,
+    string FollowUpActions,
+    string Notes);
 public sealed record CaseConferenceItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
 
 public sealed record CreateHomeVisitRequest(
@@ -112,7 +122,11 @@ public sealed record CreateHomeVisitRequest(
     [property: Required] int VisitTypeId,
     [property: Required] int StatusStateId,
     [property: Required] DateTimeOffset VisitDate,
-    string Notes);
+    string? HomeEnvironmentObservations,
+    string? FamilyCooperationLevel,
+    bool SafetyConcernsIdentified,
+    string? FollowUpActions,
+    string? Notes);
 
 public sealed record CreateCaseConferenceRequest(
     [property: Required] Guid ResidentCaseId,
