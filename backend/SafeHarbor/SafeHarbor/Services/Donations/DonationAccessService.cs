@@ -125,28 +125,56 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
         // NOTE: We always create a CRM supporter profile before linking auth users so donation
         // ownership stays tied to supporters, not directly to auth account rows.
+        // Some environments define supporters.supporter_id without a default sequence, so we
+        // defensively generate an ID when needed.
         var fallbackName = BuildSupporterDisplayName(normalizedEmail, firstName, lastName);
         await using var conn = await OpenConnectionAsync(ct);
         const string insertSql = """
-            INSERT INTO lighthouse.supporters (display_name, first_name, last_name, email, supporter_type)
-            VALUES (@display_name, @first_name, @last_name, @email, @supporter_type)
+            WITH resolved_id AS (
+                SELECT CASE
+                    WHEN pg_get_serial_sequence('lighthouse.supporters', 'supporter_id') IS NOT NULL
+                        THEN nextval(pg_get_serial_sequence('lighthouse.supporters', 'supporter_id'))
+                    ELSE (
+                        SELECT COALESCE(MAX(supporter_id), 0) + 1
+                        FROM lighthouse.supporters
+                    )
+                END AS supporter_id
+            )
+            INSERT INTO lighthouse.supporters (supporter_id, display_name, first_name, last_name, email, supporter_type)
+            SELECT
+                resolved_id.supporter_id,
+                @display_name,
+                @first_name,
+                @last_name,
+                @email,
+                @supporter_type
+            FROM resolved_id
             RETURNING supporter_id
             """;
 
-        var created = await ExecuteScalarAsync<object?>(
-            conn,
-            insertSql,
-            new Dictionary<string, object>
-            {
-                ["display_name"] = fallbackName,
-                ["first_name"] = string.IsNullOrWhiteSpace(firstName) ? DBNull.Value : firstName.Trim(),
-                ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
-                ["email"] = normalizedEmail,
-                ["supporter_type"] = "Individual",
-            },
-            ct);
+        try
+        {
+            var created = await ExecuteScalarAsync<object?>(
+                conn,
+                insertSql,
+                new Dictionary<string, object>
+                {
+                    ["display_name"] = fallbackName,
+                    ["first_name"] = string.IsNullOrWhiteSpace(firstName) ? DBNull.Value : firstName.Trim(),
+                    ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
+                    ["email"] = normalizedEmail,
+                    ["supporter_type"] = "Individual",
+                },
+                ct);
 
-        return created is null || created is DBNull ? null : Convert.ToInt64(created);
+            return created is null || created is DBNull ? null : Convert.ToInt64(created);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Concurrent registration can race the insert for the same email; resolve by
+            // reading the supporter row that just won the unique constraint.
+            return await FindSupporterByEmailAsync(normalizedEmail, ct);
+        }
     }
 
     private async Task<IReadOnlyCollection<DonationListItem>> ReadDonationsAsync(
