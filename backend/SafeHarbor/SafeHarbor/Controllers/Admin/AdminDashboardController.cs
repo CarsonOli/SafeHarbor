@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
@@ -11,16 +12,15 @@ namespace SafeHarbor.Controllers.Admin;
 public sealed class AdminDashboardController : ControllerBase
 {
     [HttpGet]
-    public ActionResult<DashboardSummaryResponse> GetSummary()
+    public ActionResult GetSummary()
     {
-        // TODO: Replace these placeholders when IOperationalReportingStore is implemented.
-        // The project is intentionally running without a live database until infrastructure is ready.
-        var response = new DashboardSummaryResponse(
-            ActiveResidents: 0,
-            RecentContributions: Array.Empty<ContributionListItem>(),
-            UpcomingConferences: Array.Empty<ConferenceListItem>(),
-            SummaryOutcomes: Array.Empty<OutcomeSummaryItem>());
-
-        return Ok(response);
+        // NOTE: The endpoint intentionally returns a versioned "not implemented" envelope
+        // instead of placeholder zero values so clients can distinguish "missing feature"
+        // from genuine empty operational data.
+        return StatusCode(StatusCodes.Status501NotImplemented, new NotImplementedEnvelope(
+            ErrorCode: "NotImplemented.v1",
+            Message: "Admin dashboard summary is not implemented yet.",
+            TraceId: HttpContext.TraceIdentifier,
+            ApiVersion: "v1"));
     }
 }

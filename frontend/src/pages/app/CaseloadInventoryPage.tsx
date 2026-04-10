@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchResidentCases } from '../../services/adminOperationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { ResidentCaseListItem } from '../../types/adminOperations'
 
 export function CaseloadInventoryPage() {
@@ -52,7 +53,7 @@ export function CaseloadInventoryPage() {
         <input placeholder="Status ID" value={statusStateId} onChange={(e) => { setStatusStateId(e.target.value); setPage(1) }} />
 
         {loading && <p role="status">Loading cases…</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && <ApiErrorNotice error={error} />}
         {!loading && !error && (
           <>
             <table>

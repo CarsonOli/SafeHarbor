@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createProcessRecording, fetchProcessRecordings } from '../../services/adminOperationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { ProcessRecordItem } from '../../types/adminOperations'
 
 export function ProcessRecordingPage() {
@@ -57,7 +58,7 @@ export function ProcessRecordingPage() {
       <article className="feature-card" style={{ marginTop: '1rem' }}>
         <h2>Session timeline</h2>
         {loading && <p role="status">Loading recordings…</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && <ApiErrorNotice error={error} />}
         {success && <p role="status">{success}</p>}
         {!loading && !error && (
           <>

@@ -8,6 +8,12 @@ public sealed record DashboardSummaryResponse(
     IReadOnlyCollection<ConferenceListItem> UpcomingConferences,
     IReadOnlyCollection<OutcomeSummaryItem> SummaryOutcomes);
 
+public sealed record NotImplementedEnvelope(
+    string ErrorCode,
+    string Message,
+    string TraceId,
+    string ApiVersion);
+
 public sealed record ContributionListItem(Guid Id, string DonorName, decimal Amount, DateTimeOffset ContributionDate, string Status);
 public sealed record ConferenceListItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
 public sealed record OutcomeSummaryItem(DateOnly SnapshotDate, int TotalResidentsServed, int TotalHomeVisits, decimal TotalContributions);
