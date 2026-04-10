@@ -42,14 +42,14 @@ namespace SafeHarbor.Migrations
                     END IF;
 
                     EXECUTE format(
-                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS family_cooperation_level text NOT NULL DEFAULT '''''';',
-                        target_schema, target_table);
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS family_cooperation_level text NOT NULL DEFAULT %L;',
+                        target_schema, target_table, '');
                     EXECUTE format(
-                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS follow_up_actions text NOT NULL DEFAULT '''''';',
-                        target_schema, target_table);
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS follow_up_actions text NOT NULL DEFAULT %L;',
+                        target_schema, target_table, '');
                     EXECUTE format(
-                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS home_environment_observations text NOT NULL DEFAULT '''''';',
-                        target_schema, target_table);
+                        'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS home_environment_observations text NOT NULL DEFAULT %L;',
+                        target_schema, target_table, '');
                     EXECUTE format(
                         'ALTER TABLE %I.%I ADD COLUMN IF NOT EXISTS safety_concerns_identified boolean NOT NULL DEFAULT false;',
                         target_schema, target_table);
