@@ -3,7 +3,7 @@ name: Azure Static Web Apps CI/CD
 on:
   workflow_dispatch:
     inputs:
-      diagnostic_mode: true
+      diagnostic_mode:
         description: "Run pre-deploy diagnostics and skip Azure upload."
         required: false
         default: false
