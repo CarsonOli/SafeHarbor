@@ -26,21 +26,18 @@ jobs:
           lfs: false
       - name: Validate SWA deployment token is configured
         env:
-          # Prefer canonical/shared secret names first so stale Azure-generated keys do not shadow rotated tokens.
-          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+          # Deployment branch now targets a single SWA instance, so use one explicit secret only.
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_TREE_09612770F }}
         run: |
           if [ -z "$SWA_TOKEN" ]; then
-            echo "Missing SWA token. Set one of the following repository secrets: AZURE_STATIC_WEB_APPS_API_TOKEN (preferred), AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING, or AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F."
+            echo "Missing SWA token. Set repository secret: AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_TREE_09612770F."
             echo "Note: this workflow runs on the deployment branch and reads repository-level secrets."
             exit 1
           fi
       - name: Diagnostic mode summary
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == true }}
         env:
-          SWA_TOKEN_PRIMARY: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
-          SWA_TOKEN_GENERIC: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          SWA_TOKEN_STAGING: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING }}
-          SWA_TOKEN_FALLBACK: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+          SWA_TOKEN_HAPPY_TREE: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_TREE_09612770F }}
         run: |
           # Diagnostic mode intentionally prints only metadata and lengths; never print token values.
           echo "Diagnostic mode is ON. Azure upload step will be skipped."
@@ -49,19 +46,15 @@ jobs:
           echo "sha=${GITHUB_SHA}"
           [ -d "./frontend" ] && echo "frontend directory exists" || echo "frontend directory missing"
 
-          if [ -n "$SWA_TOKEN_GENERIC" ]; then
-            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN"
-          elif [ -n "$SWA_TOKEN_STAGING" ]; then
-            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING"
-          elif [ -n "$SWA_TOKEN_PRIMARY" ]; then
-            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F"
+          if [ -n "$SWA_TOKEN_HAPPY_TREE" ]; then
+            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_TREE_09612770F"
           else
             echo "token_source=none"
           fi
 
-          if [ -n "$SWA_TOKEN_FALLBACK" ]; then
+          if [ -n "$SWA_TOKEN_HAPPY_TREE" ]; then
             echo "token_present=true"
-            echo "token_length=${#SWA_TOKEN_FALLBACK}"
+            echo "token_length=${#SWA_TOKEN_HAPPY_TREE}"
           else
             echo "token_present=false"
           fi
@@ -73,9 +66,8 @@ jobs:
           # Route SPA API calls to the deployed backend service instead of same-origin SWA paths.
           VITE_API_BASE_URL: https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net
         with:
-          # Keep compatibility with Azure-generated and repo-standard secret names used elsewhere in this repo.
-          # Prefer shared secret names first to avoid shadowing a newly rotated token with an old generated key.
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+          # Deployment branch now publishes only to the Happy Tree SWA environment.
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_TREE_09612770F }}
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
