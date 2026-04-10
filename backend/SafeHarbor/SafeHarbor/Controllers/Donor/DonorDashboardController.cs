@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Npgsql;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
 using SafeHarbor.Services;
@@ -48,40 +47,25 @@ public sealed class DonorDashboardController(
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated user id claim is required." });
         }
 
-        var (donorId, donorEmail) = ResolveIdentityClaims();
-        if (donorId is null && string.IsNullOrWhiteSpace(donorEmail))
+        var (_, donorEmail) = ResolveIdentityClaims();
+        if (string.IsNullOrWhiteSpace(donorEmail))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor identity claim is required." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor email claim is required." });
         }
 
-        // NOTE: Prefer supporter-linked donation writes first because several deployed environments
-        // no longer have lighthouse.donors. This avoids avoidable 500s on /api/donor/contribution.
         var supporterDonationId = await donationAccessService.CreateDonationForCurrentUserAsync(
             userId.Value,
             donorEmail,
             request.Amount,
             "One-time",
             ct);
-        if (supporterDonationId is not null)
-        {
-            var syntheticId = ToDeterministicGuid(supporterDonationId.Value);
-            return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
-        }
-
-        try
-        {
-            var contribution = await donorDashboardService.AddContributionAsync(donorId, donorEmail, request, ct);
-            if (contribution is null)
-            {
-                return NotFound(new { error = "No donor profile found for the authenticated identity." });
-            }
-
-            return CreatedAtAction(nameof(GetDashboard), null, contribution);
-        }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn)
+        if (supporterDonationId is null)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unable to record donation for this account." });
         }
+
+        var syntheticId = ToDeterministicGuid(supporterDonationId.Value);
+        return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
     }
 
     [HttpGet("donations")]

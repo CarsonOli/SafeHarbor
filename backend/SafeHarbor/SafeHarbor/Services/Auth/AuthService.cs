@@ -97,6 +97,12 @@ public sealed class AuthService(
             user.FirstName,
             user.LastName,
             cancellationToken);
+        if (user.SupporterId is null)
+        {
+            // NOTE: donor-facing flows depend on user -> supporter linkage. Fail fast so
+            // operators can fix schema mismatches instead of creating partially-linked users.
+            return new AuthRegisterResult(false, "ProvisioningError", "Unable to provision supporter profile for this account.");
+        }
         await domainProfileProvisioningService.EnsureProvisionedForUserAsync(
             user.UserId,
             user.Email,
