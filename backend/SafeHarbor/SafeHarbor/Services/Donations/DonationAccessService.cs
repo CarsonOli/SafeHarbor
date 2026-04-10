@@ -812,7 +812,9 @@ public sealed class DonationAccessService(
         return value switch
         {
             DateTimeOffset dto => dto,
-            DateTime dt => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+            DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+            DateOnly dateOnly => new DateTimeOffset(
+                DateTime.SpecifyKind(dateOnly.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)),
             _ => null
         };
     }
