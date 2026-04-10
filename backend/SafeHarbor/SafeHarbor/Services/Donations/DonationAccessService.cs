@@ -24,10 +24,11 @@ public sealed class DonationAccessService(
     public async Task<PagedResult<DonationListItem>> GetAllDonationsAsync(DonationFiltersQuery filters, CancellationToken ct)
     {
         var normalized = NormalizeFilters(filters);
-        var sql = BuildDonationQuery(normalized, scopedSupporterId: null);
-        var totalSql = BuildDonationCountQuery(normalized, scopedSupporterId: null);
 
         await using var conn = await OpenConnectionAsync(ct);
+        var queryShape = await GetDonationQueryShapeAsync(conn, ct);
+        var sql = BuildDonationQuery(normalized, scopedSupporterId: null, queryShape);
+        var totalSql = BuildDonationCountQuery(normalized, scopedSupporterId: null, queryShape);
         var totalCount = await ExecuteScalarAsync<int>(conn, totalSql.Sql, totalSql.Parameters, ct);
         var donations = await ReadDonationsAsync(conn, sql.Sql, sql.Parameters, ct);
 
@@ -36,8 +37,9 @@ public sealed class DonationAccessService(
 
     public async Task<DonationListItem?> GetDonationByIdAsync(long donationId, CancellationToken ct)
     {
-        var query = BuildDonationByIdQuery(donationId);
         await using var conn = await OpenConnectionAsync(ct);
+        var queryShape = await GetDonationQueryShapeAsync(conn, ct);
+        var query = BuildDonationByIdQuery(donationId, queryShape);
         var items = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
         return items.FirstOrDefault();
     }
@@ -483,9 +485,9 @@ public sealed class DonationAccessService(
             .ToArray();
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationByIdQuery(long donationId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationByIdQuery(long donationId, DonationQueryShape queryShape)
     {
-        var sql = BaseDonationProjection() + "\nWHERE d.donation_id = @donation_id\nORDER BY d.donation_date DESC, i.item_id";
+        var sql = BaseDonationProjection(queryShape) + "\nWHERE d.donation_id = @donation_id\nORDER BY d.donation_date DESC, i.item_id";
         return (sql, new Dictionary<string, object> { ["donation_id"] = donationId });
     }
 
@@ -550,7 +552,10 @@ public sealed class DonationAccessService(
         return items;
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(
+        NormalizedDonationFilters filters,
+        long? scopedSupporterId,
+        DonationQueryShape queryShape)
     {
         var where = new List<string>();
         var parameters = new Dictionary<string, object>();
@@ -571,7 +576,7 @@ public sealed class DonationAccessService(
         AddTextFilter(where, parameters, "d.campaign_name", "campaign_name", filters.Campaign);
         AddTextFilter(where, parameters, "d.channel_source", "channel_source", filters.ChannelSource);
         AddTextFilter(where, parameters, "s.supporter_type", "supporter_type", filters.SupporterType);
-        AddTextFilter(where, parameters, "d.frequency", "frequency", filters.Frequency);
+        AddTextFilter(where, parameters, queryShape.FrequencyFilterExpression, "frequency", filters.Frequency);
 
         if (scopedSupporterId is { } supporterId)
         {
@@ -584,7 +589,7 @@ public sealed class DonationAccessService(
         parameters["offset"] = (filters.Page - 1) * filters.PageSize;
 
         var sql = $$"""
-            {{BaseDonationProjection()}}
+            {{BaseDonationProjection(queryShape)}}
             {{whereClause}}
             ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC, i.item_id
             LIMIT @limit OFFSET @offset
@@ -593,7 +598,10 @@ public sealed class DonationAccessService(
         return (sql, parameters);
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationCountQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationCountQuery(
+        NormalizedDonationFilters filters,
+        long? scopedSupporterId,
+        DonationQueryShape queryShape)
     {
         var where = new List<string>();
         var parameters = new Dictionary<string, object>();
@@ -614,7 +622,7 @@ public sealed class DonationAccessService(
         AddTextFilter(where, parameters, "d.campaign_name", "campaign_name", filters.Campaign);
         AddTextFilter(where, parameters, "d.channel_source", "channel_source", filters.ChannelSource);
         AddTextFilter(where, parameters, "s.supporter_type", "supporter_type", filters.SupporterType);
-        AddTextFilter(where, parameters, "d.frequency", "frequency", filters.Frequency);
+        AddTextFilter(where, parameters, queryShape.FrequencyFilterExpression, "frequency", filters.Frequency);
 
         if (scopedSupporterId is { } supporterId)
         {
@@ -633,8 +641,8 @@ public sealed class DonationAccessService(
         return (sql, parameters);
     }
 
-    private static string BaseDonationProjection() =>
-        """
+    private static string BaseDonationProjection(DonationQueryShape queryShape) =>
+        $$"""
         SELECT
             d.donation_id,
             d.donation_date,
@@ -643,7 +651,7 @@ public sealed class DonationAccessService(
             COALESCE(d.estimated_value, 0) AS estimated_value,
             d.campaign_name,
             d.channel_source,
-            d.frequency,
+            {{queryShape.FrequencySelectExpression}} AS frequency,
             d.notes,
             d.supporter_id,
             s.display_name,
@@ -662,6 +670,30 @@ public sealed class DonationAccessService(
         JOIN lighthouse.supporters s ON s.supporter_id = d.supporter_id
         LEFT JOIN lighthouse.in_kind_donation_items i ON i.donation_id = d.donation_id
         """;
+
+    private async Task<DonationQueryShape> GetDonationQueryShapeAsync(NpgsqlConnection conn, CancellationToken ct)
+    {
+        var columns = await GetTableColumnsAsync(conn, "donations", ct);
+        var names = columns
+            .Select(x => x.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // NOTE: Some deployed databases still expose recurring cadence as is_recurring
+        // instead of frequency. Build SQL against whichever column set exists so the
+        // admin donations view does not fail during phased schema rollouts.
+        if (names.Contains("frequency"))
+        {
+            return new DonationQueryShape("d.frequency", "d.frequency");
+        }
+
+        if (names.Contains("is_recurring"))
+        {
+            const string recurringExpression = "CASE WHEN d.is_recurring IS TRUE THEN 'Monthly' WHEN d.is_recurring IS FALSE THEN 'One-time' ELSE NULL END";
+            return new DonationQueryShape(recurringExpression, recurringExpression);
+        }
+
+        return DonationQueryShape.Default;
+    }
 
     private static string BuildSupporterDisplayName(string normalizedEmail, string? firstName, string? lastName)
     {
@@ -696,9 +728,9 @@ public sealed class DonationAccessService(
         return "Unknown supporter";
     }
 
-    private static void AddTextFilter(List<string> where, Dictionary<string, object> parameters, string field, string parameterName, string? value)
+    private static void AddTextFilter(List<string> where, Dictionary<string, object> parameters, string? field, string parameterName, string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(field) || string.IsNullOrWhiteSpace(value))
         {
             return;
         }
@@ -846,6 +878,13 @@ public sealed class DonationAccessService(
     private sealed record DynamicInsertPlan(
         string Sql,
         IReadOnlyDictionary<string, object> Parameters);
+
+    private sealed record DonationQueryShape(
+        string FrequencySelectExpression,
+        string? FrequencyFilterExpression)
+    {
+        public static DonationQueryShape Default { get; } = new("NULL::text", null);
+    }
 
     private sealed record ColumnSchema(
         string Name,
