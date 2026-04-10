@@ -257,9 +257,17 @@ public sealed class DonationAccessService(
         {
             if (string.Equals(column.Name, idColumn, StringComparison.OrdinalIgnoreCase))
             {
-                includeResolvedId = true;
-                insertColumns.Add(QuoteIdentifier(column.Name));
-                insertExpressions.Add("(SELECT generated_id FROM resolved_id)");
+                // NOTE: Explicitly writing the PK value breaks when environments use
+                // GENERATED ALWAYS identity columns (e.g., supporters.supporter_id).
+                // In those cases we let Postgres generate the key and rely on RETURNING.
+                // We only resolve the id ourselves for legacy schemas that have neither
+                // identity nor default value configured for the PK.
+                if (!column.IsIdentity && !column.HasDefault)
+                {
+                    includeResolvedId = true;
+                    insertColumns.Add(QuoteIdentifier(column.Name));
+                    insertExpressions.Add("(SELECT generated_id FROM resolved_id)");
+                }
                 continue;
             }
 

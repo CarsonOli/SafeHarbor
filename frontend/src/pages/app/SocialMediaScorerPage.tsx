@@ -6,58 +6,61 @@ import type { PostScoreRequest, PostScoreResponse } from '../../services/socialM
 
 // ── Option helpers ────────────────────────────────────────────────────────────
 // Each entry is [displayLabel, modelValue]. Display labels are human-readable;
-// modelValue must match the training data column names exactly.
+// modelValue must match the deployed feature names exactly or the scorer silently
+// drops the categorical signal and produces misleading likelihood bands.
 
 const PLATFORMS = [
-  ['Facebook', 'Facebook'],
   ['Instagram', 'Instagram'],
   ['Twitter / X', 'Twitter'],
   ['TikTok', 'TikTok'],
   ['YouTube', 'YouTube'],
+  ['LinkedIn', 'LinkedIn'],
+  ['WhatsApp', 'WhatsApp'],
 ] as const
 
 const POST_TYPES = [
   ['Impact Story', 'ImpactStory'],
   ['Fundraising Appeal', 'FundraisingAppeal'],
-  ['Awareness Campaign', 'Awareness'],
-  ['Event Promotion', 'EventPromo'],
-  ['General Update', 'Update'],
+  ['Educational Content', 'EducationalContent'],
+  ['Event Promotion', 'EventPromotion'],
+  ['Thank You', 'ThankYou'],
 ] as const
 
 const MEDIA_TYPES = [
   ['Photo / Image', 'Photo'],
   ['Video', 'Video'],
   ['Reel / Short-form video', 'Reel'],
-  ['Carousel (multiple images)', 'Carousel'],
   ['Text only', 'Text'],
 ] as const
 
 const CONTENT_TOPICS = [
-  ['Resident story', 'ResidentStory'],
-  ['Donor spotlight', 'DonorSpotlight'],
-  ['Program update', 'ProgramUpdate'],
-  ['Event announcement', 'EventAnnouncement'],
-  ['Statistics / Data', 'Statistics'],
+  ['Reintegration', 'Reintegration'],
+  ['Education', 'Education'],
+  ['Health', 'Health'],
+  ['Campaign launch', 'CampaignLaunch'],
+  ['Donor impact', 'DonorImpact'],
+  ['Event recap', 'EventRecap'],
+  ['Gratitude', 'Gratitude'],
+  ['Safehouse life', 'SafehouseLife'],
 ] as const
 
 const TONES = [
   ['Emotional', 'Emotional'],
   ['Urgent', 'Urgent'],
-  ['Celebratory', 'Celebratory'],
   ['Informative', 'Informative'],
+  ['Hopeful', 'Hopeful'],
   ['Grateful / Thank-you', 'Grateful'],
 ] as const
 
 const CTA_TYPES = [
-  ['Donate now', 'Donate'],
-  ['Volunteer', 'Volunteer'],
-  ['Share this post', 'Share'],
   ['Learn more', 'LearnMore'],
+  ['Share story', 'ShareStory'],
+  ['Sign up', 'SignUp'],
   ['No call to action', 'None'],
 ] as const
 
 const DAYS = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday', 'Sunday',
 ] as const
 
 // ── Result colours ────────────────────────────────────────────────────────────
@@ -68,17 +71,23 @@ const LIKELIHOOD_STYLES: Record<string, { background: string; color: string }> =
   Low:    { background: '#E24B4A', color: '#fff' },
 }
 
+const LIKELIHOOD_GUIDANCE: Record<string, string> = {
+  High:   'High likelihood means the model scored this post at 65% or above.',
+  Medium: 'Medium likelihood means the model scored this post between 40% and 64.9%.',
+  Low:    'Low likelihood means the model scored this post below 40%.',
+}
+
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_FORM: PostScoreRequest = {
-  platform:              'Facebook',
+  platform:              'Instagram',
   postType:              'ImpactStory',
   mediaType:             'Photo',
-  contentTopic:          'ResidentStory',
+  contentTopic:          'Reintegration',
   sentimentTone:         'Emotional',
   featuresResidentStory: false,
   hasCallToAction:       true,
-  callToActionType:      'Donate',
+  callToActionType:      'LearnMore',
   isBoosted:             false,
   boostBudgetPhp:        0,
   postHour:              10,
@@ -143,41 +152,10 @@ export function SocialMediaScorerPage() {
     setForm(DEFAULT_FORM)
   }
 
-  // ── Result view ──
-  if (result) {
-    const liStyle = LIKELIHOOD_STYLES[result.conversionLikelihood] ?? { background: '#999', color: '#fff' }
-    return (
-      <section>
-        <p className="eyebrow">ML Insights</p>
-        <h1>Social Media Post Scorer</h1>
+  const liStyle = result
+    ? LIKELIHOOD_STYLES[result.conversionLikelihood] ?? { background: '#999', color: '#fff' }
+    : null
 
-        <div className="metric-card" style={{ maxWidth: '640px' }}>
-          <p className="eyebrow">Conversion Prediction</p>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-            <span style={{ ...liStyle, borderRadius: '6px', padding: '6px 20px', fontSize: '1rem', fontWeight: 700 }}>
-              {result.conversionLikelihood} likelihood
-            </span>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-              {(result.probability * 100).toFixed(1)}%
-            </span>
-            <span style={{ fontSize: '0.9rem', color: '#64748b' }}>estimated chance of driving a donation referral</span>
-          </div>
-
-          <p className="eyebrow" style={{ marginBottom: '0.5rem' }}>Recommendations to improve conversion</p>
-          <ul style={{ paddingLeft: '1.25rem', lineHeight: 1.8, margin: 0 }}>
-            {result.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
-          </ul>
-
-          <button className="button button-primary" onClick={handleReset} style={{ marginTop: '1.5rem' }}>
-            ← Score another post
-          </button>
-        </div>
-      </section>
-    )
-  }
-
-  // ── Form view ──
   return (
     <section>
       <p className="eyebrow">ML Insights</p>
@@ -189,137 +167,206 @@ export function SocialMediaScorerPage() {
 
       {error && <ApiErrorNotice error={error} />}
 
-      <form className="chart-card" style={{ maxWidth: '700px' }} onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem 1.5rem' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.7fr) minmax(280px, 0.9fr)',
+          gap: '1.5rem',
+          alignItems: 'start',
+        }}
+      >
+        <form className="chart-card" onSubmit={handleSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem 1.5rem' }}>
 
-          <SectionHeading>Content</SectionHeading>
+            <SectionHeading>Content</SectionHeading>
 
-          <FieldGroup label="Platform">
-            <select value={form.platform} onChange={(e) => setField('platform', e.target.value)}>
-              {PLATFORMS.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Platform">
+              <select value={form.platform} onChange={(e) => setField('platform', e.target.value)}>
+                {PLATFORMS.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Post type">
-            <select value={form.postType} onChange={(e) => setField('postType', e.target.value)}>
-              {POST_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Post type">
+              <select value={form.postType} onChange={(e) => setField('postType', e.target.value)}>
+                {POST_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Media format">
-            <select value={form.mediaType} onChange={(e) => setField('mediaType', e.target.value)}>
-              {MEDIA_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Media format">
+              <select value={form.mediaType} onChange={(e) => setField('mediaType', e.target.value)}>
+                {MEDIA_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Content topic">
-            <select value={form.contentTopic} onChange={(e) => setField('contentTopic', e.target.value)}>
-              {CONTENT_TOPICS.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Content topic">
+              <select value={form.contentTopic} onChange={(e) => setField('contentTopic', e.target.value)}>
+                {CONTENT_TOPICS.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Tone / sentiment">
-            <select value={form.sentimentTone} onChange={(e) => setField('sentimentTone', e.target.value)}>
-              {TONES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Tone / sentiment">
+              <select value={form.sentimentTone} onChange={(e) => setField('sentimentTone', e.target.value)}>
+                {TONES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Call to action">
-            <select value={form.callToActionType} onChange={(e) => setField('callToActionType', e.target.value)}>
-              {CTA_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Call to action">
+              <select value={form.callToActionType} onChange={(e) => setField('callToActionType', e.target.value)}>
+                {CTA_TYPES.map(([label, val]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </FieldGroup>
 
-          <SectionHeading>Timing</SectionHeading>
+            <SectionHeading>Timing</SectionHeading>
 
-          <FieldGroup label="Day of week">
-            <select value={form.dayOfWeek} onChange={(e) => setField('dayOfWeek', e.target.value)}>
-              {DAYS.map((d) => <option key={d}>{d}</option>)}
-            </select>
-          </FieldGroup>
+            <FieldGroup label="Day of week">
+              <select value={form.dayOfWeek} onChange={(e) => setField('dayOfWeek', e.target.value)}>
+                {DAYS.map((d) => <option key={d}>{d}</option>)}
+              </select>
+            </FieldGroup>
 
-          <FieldGroup label="Hour of day" hint="0 = midnight · 10 = 10 am · 20 = 8 pm">
-            <input
-              type="number" min={0} max={23}
-              value={form.postHour}
-              onChange={(e) => setField('postHour', Number(e.target.value))}
-            />
-          </FieldGroup>
+            <FieldGroup label="Hour of day" hint="0 = midnight · 10 = 10 am · 20 = 8 pm">
+              <input
+                type="number" min={0} max={23}
+                value={form.postHour}
+                onChange={(e) => setField('postHour', Number(e.target.value))}
+              />
+            </FieldGroup>
 
-          <SectionHeading>Engagement details</SectionHeading>
+            <SectionHeading>Engagement details</SectionHeading>
 
-          <FieldGroup label="Number of hashtags">
-            <input
-              type="number" min={0} max={30}
-              value={form.numHashtags}
-              onChange={(e) => setField('numHashtags', Number(e.target.value))}
-            />
-          </FieldGroup>
+            <FieldGroup label="Number of hashtags">
+              <input
+                type="number" min={0} max={30}
+                value={form.numHashtags}
+                onChange={(e) => setField('numHashtags', Number(e.target.value))}
+              />
+            </FieldGroup>
 
-          <FieldGroup label="Caption length" hint="Total characters in the caption">
-            <input
-              type="number" min={0}
-              value={form.captionLength}
-              onChange={(e) => setField('captionLength', Number(e.target.value))}
-            />
-          </FieldGroup>
+            <FieldGroup label="Caption length" hint="Total characters in the caption">
+              <input
+                type="number" min={0}
+                value={form.captionLength}
+                onChange={(e) => setField('captionLength', Number(e.target.value))}
+              />
+            </FieldGroup>
 
-          <FieldGroup label="Mentions / tags" hint="@ accounts tagged in the post">
-            <input
-              type="number" min={0}
-              value={form.mentionsCount}
-              onChange={(e) => setField('mentionsCount', Number(e.target.value))}
-            />
-          </FieldGroup>
+            <FieldGroup label="Mentions / tags" hint="@ accounts tagged in the post">
+              <input
+                type="number" min={0}
+                value={form.mentionsCount}
+                onChange={(e) => setField('mentionsCount', Number(e.target.value))}
+              />
+            </FieldGroup>
 
-          <FieldGroup label="Boost budget (₱)" hint="0 if not boosted">
-            <input
-              type="number" min={0} step={100}
-              value={form.boostBudgetPhp}
-              onChange={(e) => setField('boostBudgetPhp', Number(e.target.value))}
-            />
-          </FieldGroup>
+            <FieldGroup label="Boost budget (₱)" hint="0 if not boosted">
+              <input
+                type="number" min={0} step={100}
+                value={form.boostBudgetPhp}
+                onChange={(e) => setField('boostBudgetPhp', Number(e.target.value))}
+              />
+            </FieldGroup>
 
-          <SectionHeading>Options</SectionHeading>
+            <SectionHeading>Options</SectionHeading>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={form.featuresResidentStory}
-              onChange={(e) => setField('featuresResidentStory', e.target.checked)}
-            />
-            <span style={{ fontSize: '0.9rem' }}>Post features a resident story</span>
-          </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.featuresResidentStory}
+                onChange={(e) => setField('featuresResidentStory', e.target.checked)}
+              />
+              <span style={{ fontSize: '0.9rem' }}>Post features a resident story</span>
+            </label>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={form.hasCallToAction}
-              onChange={(e) => setField('hasCallToAction', e.target.checked)}
-            />
-            <span style={{ fontSize: '0.9rem' }}>Post has a call to action</span>
-          </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.hasCallToAction}
+                onChange={(e) => setField('hasCallToAction', e.target.checked)}
+              />
+              <span style={{ fontSize: '0.9rem' }}>Post has a call to action</span>
+            </label>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={form.isBoosted}
-              onChange={(e) => setField('isBoosted', e.target.checked)}
-            />
-            <span style={{ fontSize: '0.9rem' }}>Post will be boosted / paid promotion</span>
-          </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.isBoosted}
+                onChange={(e) => setField('isBoosted', e.target.checked)}
+              />
+              <span style={{ fontSize: '0.9rem' }}>Post will be boosted / paid promotion</span>
+            </label>
 
-        </div>
+          </div>
 
-        <button
-          className="button button-primary"
-          type="submit"
-          disabled={loading}
-          style={{ marginTop: '1.5rem' }}
-        >
-          {loading ? 'Scoring…' : 'Score this post →'}
-        </button>
-      </form>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? 'Scoring…' : 'Score this post →'}
+            </button>
+            <button
+              className="button"
+              type="button"
+              onClick={handleReset}
+              disabled={loading && result === null}
+            >
+              Reset form
+            </button>
+          </div>
+        </form>
+
+        <aside className="metric-card" style={{ position: 'sticky', top: '1rem' }}>
+          <p className="eyebrow">Conversion Prediction</p>
+          <h2 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Likelihood snapshot</h2>
+
+          {!result ? (
+            <div style={{ display: 'grid', gap: '0.9rem' }}>
+              <p style={{ margin: 0, color: '#475569', lineHeight: 1.6 }}>
+                Enter post details and score the draft to see the likelihood, exact probability, and tailored recommendations here.
+              </p>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>Likelihood bands</p>
+                <p style={{ margin: '0.5rem 0 0', color: '#64748b', lineHeight: 1.6 }}>
+                  High: 65%+<br />
+                  Medium: 40% to 64.9%<br />
+                  Low: below 40%
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span style={{ ...liStyle, borderRadius: '999px', padding: '0.45rem 0.95rem', fontSize: '0.95rem', fontWeight: 700 }}>
+                  {result.conversionLikelihood} likelihood
+                </span>
+                <span style={{ fontSize: '2rem', fontWeight: 800, color: '#0f172a' }}>
+                  {(result.probability * 100).toFixed(1)}%
+                </span>
+              </div>
+
+              <p style={{ margin: 0, color: '#475569', lineHeight: 1.6 }}>
+                {LIKELIHOOD_GUIDANCE[result.conversionLikelihood] ?? 'This score is based on the trained model probability band.'}
+              </p>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>What this means</p>
+                <p style={{ margin: '0.5rem 0 0', color: '#64748b', lineHeight: 1.6 }}>
+                  The percentage is the model&apos;s estimated chance that this post will drive a donation referral.
+                  The label is a simplified band so staff can scan results faster.
+                </p>
+              </div>
+
+              <div>
+                <p className="eyebrow" style={{ marginBottom: '0.5rem' }}>Recommendations to improve conversion</p>
+                <ul style={{ paddingLeft: '1.25rem', lineHeight: 1.8, margin: 0 }}>
+                  {result.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
     </section>
   )
 }

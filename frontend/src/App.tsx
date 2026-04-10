@@ -4,7 +4,6 @@ import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
 import { appNavRoutes } from './config/appAccess'
-import { ThemeToggle } from './components/ThemeToggle'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
 const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
@@ -112,8 +111,8 @@ function App() {
               <img 
                 src="/favicon.png"
                 alt="Safe Harbor Logo" 
-                width="38"   /* Explicit width for Lighthouse CLS */
-                height="38"  /* Explicit height for Lighthouse CLS */
+                width={38}
+                height={38}
                 style={{ 
                   height: '38px', 
                   width: 'auto',
@@ -129,15 +128,17 @@ function App() {
             <button type="button" className="button button-secondary" onClick={toggleTheme}>
               {theme === 'dark' ? 'Light mode' : 'Dark mode'}
             </button>
-            {session && (
+            {session ? (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})
               </button>
             ) : (
-              /* Using button-secondary ensures it gets that light teal look */
+              <>
+                {/* NOTE: Using button-secondary ensures it gets that light teal look. */}
               <Link to="/login" className="button button-secondary">
                 Login
               </Link>
+              </>
             )}
           </div>
         </div>

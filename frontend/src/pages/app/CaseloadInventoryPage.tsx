@@ -1,59 +1,104 @@
-import { useEffect, useRef, useState } from 'react'
-import { fetchCaseloadLookups, fetchResidentCases, deleteResidentCase } from '../../services/adminOperationsApi'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  fetchCaseloadLookups,
+  fetchResidentCases,
+  deleteResidentCase,
+  createResident,
+  updateResident,
+} from '../../services/adminOperationsApi'
+import type { CreateResidentCasePayload, UpdateResidentCasePayload } from '../../services/adminOperationsApi'
+import { fetchResidentReadinessFlags } from '../../services/mlInsightsApi'
 import { toUserFacingError } from '../../services/httpErrors'
 import { ReadinessBadge } from '../../components/ReadinessBadge'
-import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
 import { useAuth } from '../../auth/AuthContext'
-
-// ─── Status badge ────────────────────────────────────────────────────────────
+import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
+import type { ResidentReadinessFlag } from '../../services/mlInsightsApi'
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  Active:   { bg: '#dcfce7', color: '#166534' },
-  Pending:  { bg: '#fef9c3', color: '#854d0e' },
-  Closed:   { bg: '#f1f5f9', color: '#475569' },
+  Active: { bg: '#dcfce7', color: '#166534' },
+  Pending: { bg: '#fef9c3', color: '#854d0e' },
+  Closed: { bg: '#f1f5f9', color: '#475569' },
   'At Risk': { bg: '#fee2e2', color: '#991b1b' },
 }
 
 function StatusBadge({ status }: { status: string }) {
   const style = STATUS_COLORS[status] ?? { bg: '#e2e8f0', color: '#334155' }
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '2px 10px',
-      borderRadius: '999px',
-      fontSize: '0.78rem',
-      fontWeight: 600,
-      background: style.bg,
-      color: style.color,
-    }}>
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: '999px',
+        fontSize: '0.78rem',
+        fontWeight: 600,
+        background: style.bg,
+        color: style.color,
+      }}
+    >
       {status}
     </span>
   )
 }
 
-// ─── Expanded detail row ──────────────────────────────────────────────────────
-
-function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem; onDelete?: () => void; isDeleting?: boolean }) {
+function CaseDetail({
+  item,
+  onDelete,
+  isDeleting,
+  hasReadiness,
+}: {
+  item: ResidentCaseListItem
+  onDelete?: () => void
+  isDeleting?: boolean
+  hasReadiness: boolean
+}) {
   const shortId = item.id.split('-')[0].toUpperCase()
   return (
     <tr>
       <td colSpan={hasReadiness ? 8 : 7} style={{ padding: '0 1rem 0.75rem 1rem', background: '#f8fafc' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: '0.5rem 1.5rem',
-          padding: '0.75rem',
-          background: '#fff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-        }}>
-          <div><span style={{ color: '#64748b' }}>Case ID</span><br /><code style={{ fontSize: '0.8rem' }}>…{shortId}</code></div>
-          <div><span style={{ color: '#64748b' }}>Full ID</span><br /><code style={{ fontSize: '0.72rem', wordBreak: 'break-all' }}>{item.id}</code></div>
-          <div><span style={{ color: '#64748b' }}>Social Worker</span><br />{item.socialWorkerExternalId ?? '—'}</div>
-          <div><span style={{ color: '#64748b' }}>Opened</span><br />{new Date(item.openedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
-          <div><span style={{ color: '#64748b' }}>Closed</span><br />{item.closedAt ? new Date(item.closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Open'}</div>
-          <div><span style={{ color: '#64748b' }}>Safehouse</span><br />{item.safehouse}</div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '0.5rem 1.5rem',
+            padding: '0.75rem',
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '6px',
+            fontSize: '0.85rem',
+          }}
+        >
+          <div>
+            <span style={{ color: '#64748b' }}>Case ID</span>
+            <br />
+            <code style={{ fontSize: '0.8rem' }}>...{shortId}</code>
+          </div>
+          <div>
+            <span style={{ color: '#64748b' }}>Full ID</span>
+            <br />
+            <code style={{ fontSize: '0.72rem', wordBreak: 'break-all' }}>{item.id}</code>
+          </div>
+          <div>
+            <span style={{ color: '#64748b' }}>Social Worker</span>
+            <br />
+            {item.socialWorkerExternalId ?? '-'}
+          </div>
+          <div>
+            <span style={{ color: '#64748b' }}>Opened</span>
+            <br />
+            {new Date(item.openedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+          </div>
+          <div>
+            <span style={{ color: '#64748b' }}>Closed</span>
+            <br />
+            {item.closedAt
+              ? new Date(item.closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+              : 'Open'}
+          </div>
+          <div>
+            <span style={{ color: '#64748b' }}>Safehouse</span>
+            <br />
+            {item.safehouse}
+          </div>
         </div>
         {onDelete && (
           <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>
@@ -71,7 +116,7 @@ function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem
                 opacity: isDeleting ? 0.6 : 1,
               }}
             >
-              {isDeleting ? 'Deleting…' : 'Delete case'}
+              {isDeleting ? 'Deleting...' : 'Delete case'}
             </button>
           </div>
         )}
@@ -80,7 +125,11 @@ function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+type CaseFormState = {
+  safehouseId: string
+  caseCategoryId: string
+  statusStateId: string
+}
 
 export function CaseloadInventoryPage() {
   const { session } = useAuth()
@@ -93,37 +142,44 @@ export function CaseloadInventoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  // Secondary readiness flag fetch — silent fallback on error
   const [readinessFlags, setReadinessFlags] = useState<Map<string, ResidentReadinessFlag>>(new Map())
 
-  // filters
   const [search, setSearch] = useState('')
   const [statusStateId, setStatusStateId] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [safehouseId, setSafehouseId] = useState('')
   const [desc, setDesc] = useState(true)
   const [page, setPage] = useState(1)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedResident, setSelectedResident] = useState<ResidentCaseListItem | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [reloadToken, setReloadToken] = useState(0)
+  const [caseForm, setCaseForm] = useState<CaseFormState>({
+    safehouseId: '',
+    caseCategoryId: '',
+    statusStateId: '',
+  })
   const PAGE_SIZE = 15
 
-  // debounced search
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current)
     searchTimer.current = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    }
   }, [search])
 
-  // load lookups once
   useEffect(() => {
     fetchCaseloadLookups()
       .then(setLookups)
-      .catch(() => {/* non-fatal */})
+      .catch(() => {
+        // Non-fatal: table still loads without lookup filters.
+      })
   }, [])
 
-  // Load readiness flags once on mount — independent of pagination
   useEffect(() => {
     let cancelled = false
     async function loadFlags() {
@@ -135,14 +191,15 @@ export function CaseloadInventoryPage() {
           setReadinessFlags(map)
         }
       } catch {
-        // Silent fallback — readiness column simply won't render
+        // Silent fallback; readiness badge is optional.
       }
     }
     void loadFlags()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  // load cases when filters change
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -169,8 +226,10 @@ export function CaseloadInventoryPage() {
       }
     }
     void load()
-    return () => { cancelled = true }
-  }, [page, PAGE_SIZE, debouncedSearch, statusStateId, categoryId, safehouseId, desc])
+    return () => {
+      cancelled = true
+    }
+  }, [page, PAGE_SIZE, debouncedSearch, statusStateId, categoryId, safehouseId, desc, reloadToken])
 
   async function handleDelete(id: string) {
     if (!window.confirm('Are you sure you want to delete this case? This cannot be undone.')) return
@@ -188,98 +247,206 @@ export function CaseloadInventoryPage() {
   }
 
   function resetFilters() {
-    setSearch(''); setStatusStateId(''); setCategoryId(''); setSafehouseId(''); setPage(1)
+    setSearch('')
+    setStatusStateId('')
+    setCategoryId('')
+    setSafehouseId('')
+    setPage(1)
+  }
+
+  function openCreateModal() {
+    setSelectedResident(null)
+    setCaseForm({
+      safehouseId: lookups?.safehouses[0]?.id ?? '',
+      caseCategoryId: lookups?.caseCategories[0] ? String(lookups.caseCategories[0].id) : '',
+      statusStateId: lookups?.statusStates[0] ? String(lookups.statusStates[0].id) : '',
+    })
+    setIsModalOpen(true)
+  }
+
+  function openEditModal(item: ResidentCaseListItem) {
+    setSelectedResident(item)
+    setCaseForm({
+      safehouseId: item.safehouseId,
+      caseCategoryId: String(item.caseCategoryId),
+      statusStateId: String(item.statusStateId),
+    })
+    setIsModalOpen(true)
+  }
+
+  function closeModal() {
+    setIsModalOpen(false)
+    setSelectedResident(null)
+    setSaving(false)
+  }
+
+  async function handleSave() {
+    if (!caseForm.safehouseId || !caseForm.caseCategoryId || !caseForm.statusStateId) {
+      setError('Please select safehouse, case category, and status before saving.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const basePayload = {
+        safehouseId: caseForm.safehouseId,
+        caseCategoryId: Number(caseForm.caseCategoryId),
+        statusStateId: Number(caseForm.statusStateId),
+        caseSubcategoryId: null,
+        residentUserId: selectedResident?.residentEntityId ?? null,
+      }
+
+      if (selectedResident) {
+        const payload: UpdateResidentCasePayload = {
+          ...basePayload,
+          closedAt: null,
+        }
+        await updateResident(selectedResident.id, payload)
+      } else {
+        const payload: CreateResidentCasePayload = {
+          ...basePayload,
+        }
+        await createResident(payload)
+      }
+
+      closeModal()
+      setError(null)
+      setReloadToken((x) => x + 1)
+    } catch (err) {
+      setError(toUserFacingError(err, 'Save failed'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasFilters = !!(search || statusStateId || categoryId || safehouseId)
+  const hasReadiness = readinessFlags.size > 0
 
   return (
     <section>
-      {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ marginBottom: '0.25rem' }}>Caseload Inventory</h1>
-          <p className="lead" style={{ margin: 0 }}>View, search, and manage resident cases, placement, and status.</p>
+          <p className="lead" style={{ margin: 0 }}>
+            View, search, and manage resident cases, placement, and status.
+          </p>
         </div>
+        <button className="button button-primary" onClick={openCreateModal} style={{ padding: '10px 20px' }}>
+          Add New Resident
+        </button>
       </div>
 
-      {/* ── Filter bar ── */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '0.6rem',
-        padding: '1rem',
-        background: '#f8fafc',
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        marginBottom: '1rem',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.6rem',
+          padding: '1rem',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+        }}
+      >
         <input
           style={{ flex: '1 1 200px', minWidth: '180px' }}
-          placeholder="Search by name, safehouse, category…"
+          placeholder="Search by name, safehouse, category..."
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
         />
 
         <select
           style={{ flex: '1 1 140px' }}
           value={statusStateId}
-          onChange={(e) => { setStatusStateId(e.target.value); setPage(1) }}
+          onChange={(e) => {
+            setStatusStateId(e.target.value)
+            setPage(1)
+          }}
         >
           <option value="">All statuses</option>
           {lookups?.statusStates.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
           ))}
         </select>
 
         <select
           style={{ flex: '1 1 140px' }}
           value={categoryId}
-          onChange={(e) => { setCategoryId(e.target.value); setPage(1) }}
+          onChange={(e) => {
+            setCategoryId(e.target.value)
+            setPage(1)
+          }}
         >
           <option value="">All categories</option>
           {lookups?.caseCategories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
           ))}
         </select>
 
         <select
           style={{ flex: '1 1 140px' }}
           value={safehouseId}
-          onChange={(e) => { setSafehouseId(e.target.value); setPage(1) }}
+          onChange={(e) => {
+            setSafehouseId(e.target.value)
+            setPage(1)
+          }}
         >
           <option value="">All safehouses</option>
           {lookups?.safehouses.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
           ))}
         </select>
 
         <select
           style={{ flex: '0 0 auto' }}
           value={desc ? 'desc' : 'asc'}
-          onChange={(e) => { setDesc(e.target.value === 'desc'); setPage(1) }}
+          onChange={(e) => {
+            setDesc(e.target.value === 'desc')
+            setPage(1)
+          }}
         >
           <option value="desc">Newest first</option>
           <option value="asc">Oldest first</option>
         </select>
 
         {hasFilters && (
-          <button onClick={resetFilters} style={{ flex: '0 0 auto', background: 'transparent', border: '1px solid #cbd5e1', color: '#64748b', borderRadius: '6px', padding: '0 0.75rem', cursor: 'pointer' }}>
+          <button
+            onClick={resetFilters}
+            style={{
+              flex: '0 0 auto',
+              background: 'transparent',
+              border: '1px solid #cbd5e1',
+              color: '#64748b',
+              borderRadius: '6px',
+              padding: '0 0.75rem',
+              cursor: 'pointer',
+            }}
+          >
             Clear filters
           </button>
         )}
       </div>
 
-      {/* ── Summary line ── */}
       <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem', color: '#64748b' }}>
-        {loading ? 'Loading…' : `${totalCount} case${totalCount !== 1 ? 's' : ''} found`}
+        {loading ? 'Loading...' : `${totalCount} case${totalCount !== 1 ? 's' : ''} found`}
       </div>
 
-      {/* ── Error ── */}
-      {error && <p role="alert" style={{ color: '#dc2626', marginBottom: '1rem' }}>{error}</p>}
+      {error && (
+        <p role="alert" style={{ color: '#dc2626', marginBottom: '1rem' }}>
+          {error}
+        </p>
+      )}
 
-      {/* ── Table ── */}
       <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
           <thead>
@@ -305,14 +472,13 @@ export function CaseloadInventoryPage() {
             {loading && items.length === 0 && (
               <tr>
                 <td colSpan={readinessFlags.size > 0 ? 8 : 7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
-                  Loading cases…
+                  Loading cases...
                 </td>
               </tr>
             )}
             {items.map((item) => (
-              <>
+              <React.Fragment key={item.id}>
                 <tr
-                  key={item.id}
                   style={{
                     borderBottom: expandedId === item.id ? 'none' : '1px solid #f1f5f9',
                     background: expandedId === item.id ? '#f8fafc' : 'white',
@@ -322,12 +488,12 @@ export function CaseloadInventoryPage() {
                   <td style={tdStyle}>
                     <strong>{item.residentName ?? <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unknown</span>}</strong>
                   </td>
-                  <td style={tdStyle}><StatusBadge status={item.status} /></td>
+                  <td style={tdStyle}>
+                    <StatusBadge status={item.status} />
+                  </td>
                   <td style={tdStyle}>{item.category}</td>
                   <td style={tdStyle}>{item.safehouse}</td>
-                  <td style={{ ...tdStyle, color: '#64748b', fontSize: '0.82rem' }}>
-                    {item.socialWorkerExternalId ?? '—'}
-                  </td>
+                  <td style={{ ...tdStyle, color: '#64748b', fontSize: '0.82rem' }}>{item.socialWorkerExternalId ?? '-'}</td>
                   <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>
                     {new Date(item.openedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </td>
@@ -356,6 +522,13 @@ export function CaseloadInventoryPage() {
                     >
                       {expandedId === item.id ? 'Close' : 'View'}
                     </button>
+                    <button onClick={() => openEditModal(item)} style={{ ...viewButtonStyle, borderColor: '#0d9488', color: '#0d9488' }}>
+                      Edit
+                    </button>
+
+                    <button onClick={() => void handleDelete(item.id)} style={{ ...viewButtonStyle, borderColor: '#be123c', color: '#be123c' }}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
                 {expandedId === item.id && (
@@ -364,22 +537,28 @@ export function CaseloadInventoryPage() {
                     item={item}
                     onDelete={isAdmin ? () => void handleDelete(item.id) : undefined}
                     isDeleting={deletingId === item.id}
+                    hasReadiness={hasReadiness}
                   />
                 )}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* ── Pagination ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '1.25rem' }}>
         <button
           disabled={page <= 1}
           onClick={() => setPage((v) => v - 1)}
-          style={{ padding: '6px 16px', borderRadius: '6px', border: '1px solid #cbd5e1', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.4 : 1 }}
+          style={{
+            padding: '6px 16px',
+            borderRadius: '6px',
+            border: '1px solid #cbd5e1',
+            cursor: page <= 1 ? 'not-allowed' : 'pointer',
+            opacity: page <= 1 ? 0.4 : 1,
+          }}
         >
-          ← Previous
+          Previous
         </button>
         <span style={{ fontSize: '0.9rem', color: '#475569' }}>
           Page {page} of {totalPages}
@@ -387,11 +566,103 @@ export function CaseloadInventoryPage() {
         <button
           disabled={page >= totalPages}
           onClick={() => setPage((v) => v + 1)}
-          style={{ padding: '6px 16px', borderRadius: '6px', border: '1px solid #cbd5e1', cursor: page >= totalPages ? 'not-allowed' : 'pointer', opacity: page >= totalPages ? 0.4 : 1 }}
+          style={{
+            padding: '6px 16px',
+            borderRadius: '6px',
+            border: '1px solid #cbd5e1',
+            cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+            opacity: page >= totalPages ? 0.4 : 1,
+          }}
         >
-          Next →
+          Next
         </button>
       </div>
+
+      {isModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '2rem',
+              borderRadius: '12px',
+              width: '500px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+            }}
+          >
+            <h2 style={{ marginBottom: '0.75rem' }}>{selectedResident ? `Edit ${selectedResident.residentName ?? 'Case'}` : 'Add New Resident'}</h2>
+            <p style={{ marginTop: 0, fontSize: '0.85rem', color: '#64748b' }}>
+              Update case details used by the caseload inventory table.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Safehouse</label>
+              <select
+                style={{ padding: '8px' }}
+                value={caseForm.safehouseId}
+                onChange={(e) => setCaseForm((prev) => ({ ...prev, safehouseId: e.target.value }))}
+              >
+                <option value="">Select Safehouse...</option>
+                {(lookups?.safehouses ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Case Category</label>
+              <select
+                style={{ padding: '8px' }}
+                value={caseForm.caseCategoryId}
+                onChange={(e) => setCaseForm((prev) => ({ ...prev, caseCategoryId: e.target.value }))}
+              >
+                <option value="">Select Category...</option>
+                {(lookups?.caseCategories ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Status</label>
+              <select
+                style={{ padding: '8px' }}
+                value={caseForm.statusStateId}
+                onChange={(e) => setCaseForm((prev) => ({ ...prev, statusStateId: e.target.value }))}
+              >
+                <option value="">Select Status...</option>
+                {(lookups?.statusStates ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button onClick={closeModal} className="button button-secondary">
+                Cancel
+              </button>
+
+              <button onClick={() => void handleSave()} disabled={saving} className="button button-primary">
+                {saving ? 'Saving...' : selectedResident ? 'Save Changes' : 'Create Resident'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -409,4 +680,14 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '0.75rem 1rem',
   verticalAlign: 'middle',
+}
+
+const viewButtonStyle: React.CSSProperties = {
+  padding: '3px 12px',
+  fontSize: '0.8rem',
+  border: '1px solid #cbd5e1',
+  borderRadius: '5px',
+  background: 'white',
+  cursor: 'pointer',
+  marginLeft: '4px',
 }

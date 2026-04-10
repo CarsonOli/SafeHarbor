@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SafeHarbor.Data;
@@ -11,9 +12,11 @@ using SafeHarbor.Data;
 namespace SafeHarbor.Migrations
 {
     [DbContext(typeof(SafeHarborDbContext))]
-    partial class SafeHarborDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260410124410_AddHomeVisitDetailsFields")]
+    partial class AddHomeVisitDetailsFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -375,8 +378,7 @@ namespace SafeHarbor.Migrations
                         .HasColumnName("id");
 
                     b.Property<bool>("ConcernsFlagged")
-                        .HasColumnType("boolean")
-                        .HasColumnName("concerns_flagged");
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -392,55 +394,45 @@ namespace SafeHarbor.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("EmotionalStateEnd")
-                        .HasColumnType("text")
-                        .HasColumnName("emotional_state_end");
+                        .HasColumnType("text");
 
                     b.Property<string>("EmotionalStateObserved")
                         .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("emotional_state_observed");
+                        .HasColumnType("text");
 
                     b.Property<string>("FollowUpActions")
-                        .HasColumnType("text")
-                        .HasColumnName("follow_up_actions");
+                        .HasColumnType("text");
 
                     b.Property<string>("InterventionsApplied")
-                        .HasColumnType("text")
-                        .HasColumnName("interventions_applied");
+                        .HasColumnType("text");
 
                     b.Property<string>("NotesRestricted")
-                        .HasColumnType("text")
-                        .HasColumnName("notes_restricted");
+                        .HasColumnType("text");
 
                     b.Property<bool>("ProgressNoted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("progress_noted");
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("RecordedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("recorded_at");
 
                     b.Property<bool>("ReferralMade")
-                        .HasColumnType("boolean")
-                        .HasColumnName("referral_made");
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("ResidentCaseId")
                         .HasColumnType("uuid")
                         .HasColumnName("resident_case_id");
 
                     b.Property<int?>("SessionDurationMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("session_duration_minutes");
+                        .HasColumnType("integer");
 
                     b.Property<string>("SessionType")
                         .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("session_type");
+                        .HasColumnType("text");
 
                     b.Property<string>("SocialWorker")
                         .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("social_worker");
+                        .HasColumnType("text");
 
                     b.Property<string>("Summary")
                         .IsRequired()

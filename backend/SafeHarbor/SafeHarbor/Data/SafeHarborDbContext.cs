@@ -185,7 +185,21 @@ namespace SafeHarbor.Data
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.ResidentCaseId).HasColumnName("resident_case_id");
                 entity.Property(e => e.RecordedAt).HasColumnName("recorded_at");
+                // NOTE: Process recordings were historically created with PascalCase EF defaults.
+                // We map explicit snake_case names so canonical lighthouse.process_recordings
+                // works consistently across reconciled and freshly provisioned environments.
+                entity.Property(e => e.SocialWorker).HasColumnName("social_worker");
+                entity.Property(e => e.SessionType).HasColumnName("session_type");
+                entity.Property(e => e.SessionDurationMinutes).HasColumnName("session_duration_minutes");
+                entity.Property(e => e.EmotionalStateObserved).HasColumnName("emotional_state_observed");
+                entity.Property(e => e.EmotionalStateEnd).HasColumnName("emotional_state_end");
                 entity.Property(e => e.Summary).HasColumnName("summary");
+                entity.Property(e => e.InterventionsApplied).HasColumnName("interventions_applied");
+                entity.Property(e => e.FollowUpActions).HasColumnName("follow_up_actions");
+                entity.Property(e => e.ProgressNoted).HasColumnName("progress_noted");
+                entity.Property(e => e.ConcernsFlagged).HasColumnName("concerns_flagged");
+                entity.Property(e => e.ReferralMade).HasColumnName("referral_made");
+                entity.Property(e => e.NotesRestricted).HasColumnName("notes_restricted");
                 MapAuditColumns(entity);
             });
 
@@ -378,5 +392,4 @@ namespace SafeHarbor.Data
         }
     }
 }
-
 
