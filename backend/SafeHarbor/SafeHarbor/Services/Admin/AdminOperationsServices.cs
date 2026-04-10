@@ -222,33 +222,23 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
 
     public async Task<bool> DeleteResidentCaseAsync(Guid id, CancellationToken ct)
     {
-        if (!await HasCanonicalCaseloadSchemaAsync(ct))
-        {
-            return await DeleteLegacyResidentCaseAsync(id, ct);
-        }
+        var entity = await db.ResidentCases
+            .Include(x => x.ProcessRecordings)
+            .Include(x => x.HomeVisits)
+            .Include(x => x.CaseConferences)
+            .Include(x => x.Assessments)
+            .Include(x => x.InterventionPlans)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return false;
 
-        try
-        {
-            var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
-            if (entity is null) return false;
-
-            // NOTE: Some deployed databases have FK constraints without cascade behavior for
-            // resident_case_id links. We clear known dependents explicitly so delete remains
-            // stable across migration drift and avoids surfacing a 500 to the client.
-            await db.ResidentAssessments.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-            await db.ProcessRecordings.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-            await db.HomeVisits.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-            await db.CaseConferences.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-            await db.InterventionPlans.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-
-            db.ResidentCases.Remove(entity);
-            await db.SaveChangesAsync(ct);
-            return true;
-        }
-        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
-        {
-            return await DeleteLegacyResidentCaseAsync(id, ct);
-        }
+        db.ProcessRecordings.RemoveRange(entity.ProcessRecordings);
+        db.HomeVisits.RemoveRange(entity.HomeVisits);
+        db.CaseConferences.RemoveRange(entity.CaseConferences);
+        db.ResidentAssessments.RemoveRange(entity.Assessments);
+        db.InterventionPlans.RemoveRange(entity.InterventionPlans);
+        db.ResidentCases.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     private async Task<ResidentCaseListItem> GetByIdAsync(Guid id, CancellationToken ct)
