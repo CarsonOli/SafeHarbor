@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SafeHarbor")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dec829221048f3daec659509bbb1551b6cc3ec3c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d698f4b12e8111b0f553f1932b9524e12f9b9860")]
 [assembly: System.Reflection.AssemblyProductAttribute("SafeHarbor")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SafeHarbor")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

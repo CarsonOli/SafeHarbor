@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchCaseloadLookups, fetchResidentCases } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
 
 // ─── Status badge ────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export function CaseloadInventoryPage() {
           setError(null)
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load cases')
+        if (!cancelled) setError(toUserFacingError(err, 'Failed to load caseload'))
       } finally {
         if (!cancelled) setLoading(false)
       }

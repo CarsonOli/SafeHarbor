@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
+import { appNavRoutes } from './config/appAccess'
 import type { AppRole } from './auth/authSession'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
@@ -21,8 +22,8 @@ function App() {
       .then((idToken) => loginWithIdentityToken(idToken))
       .catch(() => { /* backend not ready yet — user can log in manually */ })
   }, [session, loginWithIdentityToken])
-  const isStaff = session?.role === 'Admin' || session?.role === 'SocialWorker'
   const isDonor = session?.role === 'Donor'
+  const role = session?.role
 
   // Build the navigation list based on the logged-in role.
   // - Visitors (no session): see public pages including /donate.
@@ -35,23 +36,14 @@ function App() {
     { to: '/donate', label: 'Donate' },
 
     // Staff-only nav links — hidden from donors and visitors.
-    ...(isStaff
-      ? [
-          { to: '/app/dashboard', label: 'Admin Dashboard' },
-          { to: '/app/donors', label: 'Manage Contributions' },
-          { to: '/app/donor-analytics', label: 'Donor Analytics' },
-          { to: '/app/caseload', label: 'Caseload' },
-          { to: '/app/process-recording', label: 'Process Recording' },
-          { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
-          { to: '/app/reports', label: 'Reports' },
-          { to: '/app/social-media', label: 'Social Media Strategy' },
-          { to: '/privacy', label: 'Privacy' },
-        ]
+    ...(role
+      ? appNavRoutes.filter((route) => route.roles?.includes(role)).map(({ to, label }) => ({ to, label }))
       : []),
 
     // Donor-only nav link — shown only when logged in as a Donor.
     ...(isDonor ? [{ to: '/donor/dashboard', label: 'My Donations' }] : []),
 
+    { to: '/privacy', label: 'Privacy' },
     { to: '/login', label: session ? 'Switch User' : 'Login' },
   ]
 

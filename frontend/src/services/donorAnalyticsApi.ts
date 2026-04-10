@@ -1,8 +1,11 @@
 import type { DonorAnalyticsData } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError, NOT_AUTHORIZED_MESSAGE } from './httpErrors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const ANALYTICS_ENDPOINT = '/api/admin/donor-analytics'
+const ENABLE_DONOR_ANALYTICS_DEV_FALLBACK =
+  (import.meta.env.VITE_ENABLE_DONOR_ANALYTICS_DEV_FALLBACK ?? 'false') === 'true'
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
 // Used when the backend is unavailable (e.g. running frontend without a backend).
@@ -64,13 +67,40 @@ export async function fetchDonorAnalytics(): Promise<DonorAnalyticsData> {
     })
 
     if (!response.ok) {
-      console.warn(`[donorAnalyticsApi] Analytics fetch returned ${response.status} — using fallback`)
-      return FALLBACK_ANALYTICS
+      if (response.status === 403) {
+        // Do not mask policy denials with fallback content; page should show explicit auth state.
+        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE)
+      }
+
+      if (ENABLE_DONOR_ANALYTICS_DEV_FALLBACK) {
+        console.warn(`[donorAnalyticsApi] Analytics fetch returned ${response.status} — using fallback`)
+        return FALLBACK_ANALYTICS
+      }
+
+      throw new HttpError(response.status, `Donor analytics request failed with status ${response.status}`, {
+        method: 'GET',
+        endpoint: ANALYTICS_ENDPOINT,
+      })
     }
 
     return (await response.json()) as DonorAnalyticsData
   } catch (err) {
-    console.warn('[donorAnalyticsApi] Analytics fetch failed — using fallback', err)
-    return FALLBACK_ANALYTICS
+    if (err instanceof HttpError && err.status === 403) {
+      throw err
+    }
+
+    if (ENABLE_DONOR_ANALYTICS_DEV_FALLBACK) {
+      console.warn('[donorAnalyticsApi] Analytics fetch failed — using fallback', err)
+      return FALLBACK_ANALYTICS
+    }
+
+    if (err instanceof HttpError) {
+      throw err
+    }
+
+    throw new HttpError(0, 'Donor analytics request failed before receiving an HTTP response.', {
+      method: 'GET',
+      endpoint: ANALYTICS_ENDPOINT,
+    })
   }
 }

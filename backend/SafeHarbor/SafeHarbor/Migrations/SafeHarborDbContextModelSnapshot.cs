@@ -17,205 +17,11 @@ namespace SafeHarbor.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("lighthouse")
                 .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("NormalizedName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("RoleNameIndex");
-
-                    b.ToTable("AspNetRoles", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ClaimType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("AspNetRoleClaims", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ClaimType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("AspNetUserClaims", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
-                {
-                    b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ProviderKey")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("LoginProvider", "ProviderKey");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("AspNetUserLogins", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("AspNetUserRoles", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Value")
-                        .HasColumnType("text");
-
-                    b.HasKey("UserId", "LoginProvider", "Name");
-
-                    b.ToTable("AspNetUserTokens", (string)null);
-                });
-
-            modelBuilder.Entity("SafeHarbor.Auth.AppUser", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Email")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("NormalizedEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("NormalizedUserName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("SecurityStamp")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("UserName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NormalizedEmail")
-                        .HasDatabaseName("EmailIndex");
-
-                    b.HasIndex("NormalizedUserName")
-                        .IsUnique()
-                        .HasDatabaseName("UserNameIndex");
-
-                    b.ToTable("AspNetUsers", (string)null);
-                });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Campaign", b =>
                 {
@@ -256,7 +62,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("Campaigns");
+                    b.ToTable("campaigns", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.CaseConference", b =>
@@ -297,7 +103,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("CaseConferences");
+                    b.ToTable("case_conferences", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Contribution", b =>
@@ -352,7 +158,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("Contributions");
+                    b.ToTable("contributions", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ContributionAllocation", b =>
@@ -390,7 +196,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("SafehouseId");
 
-                    b.ToTable("ContributionAllocations");
+                    b.ToTable("contribution_allocations", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Donor", b =>
@@ -442,7 +248,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Donors");
+                    b.ToTable("donors", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.HomeVisit", b =>
@@ -488,7 +294,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("VisitTypeId");
 
-                    b.ToTable("HomeVisits");
+                    b.ToTable("home_visits", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.InterventionPlan", b =>
@@ -532,7 +338,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("InterventionPlans");
+                    b.ToTable("intervention_plans", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ProcessRecording", b =>
@@ -604,7 +410,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("ResidentCaseId");
 
-                    b.ToTable("ProcessRecordings");
+                    b.ToTable("process_recordings", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ResidentAssessment", b =>
@@ -645,7 +451,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("ResidentAssessments");
+                    b.ToTable("resident_assessments", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ResidentCase", b =>
@@ -700,7 +506,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("ResidentCases");
+                    b.ToTable("resident_cases", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Role", b =>
@@ -728,7 +534,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles");
+                    b.ToTable("roles", "lighthouse");
 
                     b.HasData(
                         new
@@ -778,7 +584,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Safehouses");
+                    b.ToTable("safehouses", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.SocialPostMetric", b =>
@@ -831,7 +637,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("CampaignId");
 
-                    b.ToTable("SocialPostMetrics");
+                    b.ToTable("social_post_metrics", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.UserProfile", b =>
@@ -867,7 +673,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserProfiles");
+                    b.ToTable("user_profiles", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.UserRole", b =>
@@ -885,7 +691,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRoles");
+                    b.ToTable("user_roles", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.CaseCategory", b =>
@@ -919,7 +725,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CaseCategory");
+                    b.ToTable("case_category", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.CaseSubcategory", b =>
@@ -958,7 +764,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("CaseCategoryId");
 
-                    b.ToTable("CaseSubcategory");
+                    b.ToTable("case_subcategory", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.ContributionType", b =>
@@ -992,7 +798,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ContributionType");
+                    b.ToTable("contribution_type", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.StatusState", b =>
@@ -1029,7 +835,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StatusState");
+                    b.ToTable("status_state", "lighthouse");
 
                     b.HasData(
                         new
@@ -1095,7 +901,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("VisitType");
+                    b.ToTable("visit_type", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Resident", b =>
@@ -1127,58 +933,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Residents");
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
-                {
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
-                {
-                    b.HasOne("SafeHarbor.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
-                {
-                    b.HasOne("SafeHarbor.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
-                {
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SafeHarbor.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
-                {
-                    b.HasOne("SafeHarbor.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.ToTable("residents", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Campaign", b =>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { fetchDonorAnalytics } from '../../services/donorAnalyticsApi'
+import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { DonorAnalyticsData } from '../../types/impact'
 
 /** Formats a number as a compact USD string, e.g. "$3,400" or "$1.2k". */
@@ -197,8 +199,8 @@ function DonationLineChart({ data }: LineChartProps) {
  *   Left sidebar: KPI metric cards, campaign OKRs, top donors leaderboard
  *   Right:        SVG line chart of monthly donation growth (last 12 months)
  *
- * All data comes from GET /api/admin/donor-analytics with fallback to static
- * seed-matched data so the page renders even without a running backend.
+ * All data comes from GET /api/admin/donor-analytics.
+ * Optional fallback data is gated behind an explicit dev-only env flag.
  */
 export function AdminDonorAnalyticsPage() {
   const [data, setData] = useState<DonorAnalyticsData | null>(null)
@@ -212,8 +214,8 @@ export function AdminDonorAnalyticsPage() {
       try {
         const result = await fetchDonorAnalytics()
         setData(result)
-      } catch {
-        setError('Unable to load donor analytics right now.')
+      } catch (error) {
+        setError(toUserFacingError(error, 'Unable to load donor analytics right now.'))
       } finally {
         setLoading(false)
       }
@@ -235,7 +237,7 @@ export function AdminDonorAnalyticsPage() {
       </p>
 
       {loading && <p role="status">Loading analytics…</p>}
-      {!loading && error && <p role="alert">{error}</p>}
+      {!loading && error && <ApiErrorNotice error={error} />}
 
       {!loading && data && (
         <div className="donor-analytics-layout">

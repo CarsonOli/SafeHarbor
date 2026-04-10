@@ -1,10 +1,10 @@
+using System.Security.Claims;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore; 
-using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -14,8 +14,10 @@ using SafeHarbor.Authorization;
 using SafeHarbor.Data; 
 using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
+using SafeHarbor.Models.Entities;
 using SafeHarbor.Services;
 using SafeHarbor.Services.Admin;
+using SafeHarbor.Services.Auth;
 using SafeHarbor.Services.DonorImpact;
 using SafeHarbor.Services.Public;
 
@@ -45,6 +47,8 @@ builder.Services.AddDbContext<SafeHarborDbContext>(options =>
 
 var passwordPolicy = builder.Configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>()
     ?? new PasswordPolicyOptions();
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection(PasswordPolicyOptions.SectionName));
 
 builder.Services
     .AddIdentityCore<AppUser>(options =>
@@ -68,24 +72,46 @@ builder.Services
     .AddEntityFrameworkStores<SafeHarborDbContext>()
     .AddSignInManager();
 
-var localAuthEnabled = (builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("LocalAuth:Enabled"))
-    || builder.Configuration.GetValue<bool>("LocalAuth:AllowInProduction");
+// NOTE: Local auth is now controlled only by configuration so non-development demos
+// can enable email/password auth intentionally without code changes.
+var localAuthEnabled = builder.Configuration.GetValue<bool>("LocalAuth:Enabled");
 var useInMemoryPersistence = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevelopmentFeatures:UseInMemoryDataStore");
-var authBuilder = builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
+var issuer = jwtOptions.Issuer;
+var audience = jwtOptions.Audience;
+var signingKey = jwtOptions.SigningKey;
 
-// FORCE local auth logic so we don't need Azure/Microsoft ClientIDs
-// We set this to true so Render uses your email/password logic
-var forceLocalAuth = true; 
-
-if (forceLocalAuth)
+// Non-development environments must provide explicit JWT settings so startup fails fast
+// instead of silently accepting an invalid auth configuration.
+if (!builder.Environment.IsDevelopment()
+    && (string.IsNullOrWhiteSpace(issuer)
+        || string.IsNullOrWhiteSpace(audience)
+        || string.IsNullOrWhiteSpace(signingKey)))
 {
-    var issuer = builder.Configuration["LocalAuth:Issuer"] ?? "safeharbor-local";
-    var audience = builder.Configuration["LocalAuth:Audience"] ?? "safeharbor-local-client";
-    // On Render, we'll use a fallback key if the secret isn't set
-    var signingKey = builder.Configuration["LocalAuth:SigningKey"] ?? "A_Very_Long_Secret_Key_For_Testing_12345!";
+    throw new InvalidOperationException("Jwt:Issuer, Jwt:Audience, and Jwt:SigningKey are required outside Development.");
+}
 
-    authBuilder.AddJwtBearer(options =>
+if (string.IsNullOrWhiteSpace(issuer))
+{
+    issuer = "safeharbor-local";
+}
+
+if (string.IsNullOrWhiteSpace(audience))
+{
+    audience = "safeharbor-local-client";
+}
+
+if (string.IsNullOrWhiteSpace(signingKey))
+{
+    signingKey = "development-signing-key-change-me";
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
+        // Keep claim mapping aligned with AuthController token emission (ClaimTypes.Role + "role"/"roles")
+        // so role policies continue to work predictably across environments.
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -95,10 +121,11 @@ if (forceLocalAuth)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(signingKey)),
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1)
+            ClockSkew = TimeSpan.FromMinutes(1),
+            NameClaimType = "preferred_username",
+            RoleClaimType = ClaimTypes.Role
         };
     });
-}
 
 builder.Services.AddAuthorization(options =>
 {
@@ -152,6 +179,10 @@ builder.Services.AddScoped<IDonorAdminService, DonorAdminService>();
 builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
 builder.Services.AddScoped<IDonorDashboardService, DonorDashboardService>();
 builder.Services.AddScoped<IDonorAnalyticsService, DonorAnalyticsService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDomainProfileProvisioningService, DomainProfileProvisioningService>();
+builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
 
 // --- DONOR IMPACT CALCULATOR ---
 // This is the "Girls Helped" logic. If you have an ML model class (e.g., MlImpactCalculator), 
@@ -240,8 +271,11 @@ if (useInMemoryPersistence)
     DonorDashboardSeeder.Seed(app.Services.GetRequiredService<InMemoryDataStore>());
 }
 
-if (localAuthEnabled)
+if (app.Environment.IsDevelopment() && localAuthEnabled)
 {
+    // NOTE: IdentityDevelopmentSeeder relies on IdentityRole mappings that are only
+    // configured for development/local auth scenarios. Avoid running this in
+    // non-development environments to prevent startup failures in production.
     await IdentityDevelopmentSeeder.SeedAsync(app.Services);
 }
 

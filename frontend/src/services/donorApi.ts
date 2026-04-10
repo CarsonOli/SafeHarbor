@@ -1,9 +1,12 @@
 import type { DonorDashboardData } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError } from './httpErrors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const DONOR_DASHBOARD_ENDPOINT = '/api/donor/dashboard'
 const DONOR_CONTRIBUTION_ENDPOINT = '/api/donor/contribution'
+const ENABLE_DONOR_DASHBOARD_DEV_FALLBACK =
+  (import.meta.env.VITE_ENABLE_DONOR_DASHBOARD_DEV_FALLBACK ?? 'false') === 'true'
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
 const FALLBACK_DASHBOARD: DonorDashboardData = {
@@ -50,14 +53,32 @@ export async function fetchDonorDashboard(email: string): Promise<DonorDashboard
     })
 
     if (!response.ok) {
-      console.warn(`[donorApi] Dashboard fetch returned ${response.status} — using fallback data`)
-      return FALLBACK_DASHBOARD
+      if (ENABLE_DONOR_DASHBOARD_DEV_FALLBACK) {
+        console.warn(`[donorApi] Dashboard fetch returned ${response.status} — using fallback data`)
+        return FALLBACK_DASHBOARD
+      }
+
+      throw new HttpError(response.status, `Donor dashboard request failed with status ${response.status}`, {
+        method: 'GET',
+        endpoint: DONOR_DASHBOARD_ENDPOINT,
+      })
     }
 
     return (await response.json()) as DonorDashboardData
   } catch (err) {
-    console.warn('[donorApi] Dashboard fetch failed — using fallback data', err)
-    return FALLBACK_DASHBOARD
+    if (ENABLE_DONOR_DASHBOARD_DEV_FALLBACK) {
+      console.warn('[donorApi] Dashboard fetch failed — using fallback data', err)
+      return FALLBACK_DASHBOARD
+    }
+
+    if (err instanceof HttpError) {
+      throw err
+    }
+
+    throw new HttpError(0, 'Donor dashboard request failed before receiving an HTTP response.', {
+      method: 'GET',
+      endpoint: DONOR_DASHBOARD_ENDPOINT,
+    })
   }
 }
 
