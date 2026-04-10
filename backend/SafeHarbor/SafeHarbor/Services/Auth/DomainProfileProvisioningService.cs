@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
 
@@ -8,21 +9,31 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
 {
     public async Task EnsureProvisionedForUserAsync(Guid userId, string email, string databaseRole, string? firstName, string? lastName, CancellationToken cancellationToken = default)
     {
-        var normalizedEmail = NormalizeEmail(email);
-        if (string.IsNullOrWhiteSpace(normalizedEmail))
+        try
         {
-            return;
-        }
+            var normalizedEmail = NormalizeEmail(email);
+            if (string.IsNullOrWhiteSpace(normalizedEmail))
+            {
+                return;
+            }
 
-        if (string.Equals(databaseRole, "user", StringComparison.Ordinal))
-        {
-            await EnsureDonorAsync(normalizedEmail, firstName, lastName, cancellationToken);
-            return;
-        }
+            if (string.Equals(databaseRole, "user", StringComparison.Ordinal))
+            {
+                await EnsureDonorAsync(normalizedEmail, firstName, lastName, cancellationToken);
+                return;
+            }
 
-        if (string.Equals(databaseRole, "staff", StringComparison.Ordinal) || string.Equals(databaseRole, "admin", StringComparison.Ordinal))
+            if (string.Equals(databaseRole, "staff", StringComparison.Ordinal) || string.Equals(databaseRole, "admin", StringComparison.Ordinal))
+            {
+                await EnsureStaffProfileAsync(userId, normalizedEmail, databaseRole, firstName, lastName, cancellationToken);
+            }
+        }
+        catch (PostgresException ex) when (IsMissingDomainProfileSchema(ex))
         {
-            await EnsureStaffProfileAsync(userId, normalizedEmail, databaseRole, firstName, lastName, cancellationToken);
+            // NOTE: Domain profile tables (donors/user_profiles/roles/user_roles) may be absent in
+            // partially provisioned environments. Registration should still succeed for lighthouse.users.
+            // Operators can backfill profiles later via auth-maintenance reconciliation after schema sync.
+            return;
         }
     }
 
@@ -163,6 +174,9 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
     }
 
     private static string NormalizeEmail(string? email) => (email ?? string.Empty).Trim().ToLowerInvariant();
+
+    private static bool IsMissingDomainProfileSchema(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
 
     // NOTE: We use a deterministic fallback display name from email local-part so donor/staff
     // records are immediately queryable even when registration omits first/last names.
