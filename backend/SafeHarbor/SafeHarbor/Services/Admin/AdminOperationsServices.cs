@@ -30,6 +30,8 @@ public interface IVisitationConferenceService
     Task<PagedResult<HomeVisitItem>> GetVisitsAsync(PagingQuery query, CancellationToken ct);
     Task<PagedResult<CaseConferenceItem>> GetUpcomingAsync(PagingQuery query, CancellationToken ct);
     Task<PagedResult<CaseConferenceItem>> GetPreviousAsync(PagingQuery query, CancellationToken ct);
+    Task<HomeVisitItem> CreateVisitAsync(CreateHomeVisitRequest request, CancellationToken ct);
+    Task<CaseConferenceItem> CreateConferenceAsync(CreateCaseConferenceRequest request, CancellationToken ct);
 }
 
 public interface IDonorContributionService
@@ -398,6 +400,47 @@ public sealed class VisitationConferenceService(SafeHarborDbContext db) : IVisit
             .ToArrayAsync(ct);
 
         return new PagedResult<CaseConferenceItem>(items, page, pageSize, total);
+    }
+
+    public async Task<HomeVisitItem> CreateVisitAsync(CreateHomeVisitRequest request, CancellationToken ct)
+    {
+        var entity = new HomeVisit
+        {
+            Id             = Guid.NewGuid(),
+            ResidentCaseId = request.ResidentCaseId,
+            VisitTypeId    = request.VisitTypeId,
+            StatusStateId  = request.StatusStateId,
+            VisitDate      = request.VisitDate,
+            Notes          = request.Notes ?? string.Empty,
+        };
+        db.HomeVisits.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await db.Entry(entity).Reference(x => x.VisitType).LoadAsync(ct);
+        await db.Entry(entity).Reference(x => x.StatusState).LoadAsync(ct);
+        return new HomeVisitItem(
+            entity.Id, entity.ResidentCaseId, entity.VisitDate,
+            entity.VisitType?.Name ?? "Unknown",
+            entity.StatusState?.Name ?? "Unknown",
+            entity.Notes);
+    }
+
+    public async Task<CaseConferenceItem> CreateConferenceAsync(CreateCaseConferenceRequest request, CancellationToken ct)
+    {
+        var entity = new CaseConference
+        {
+            Id             = Guid.NewGuid(),
+            ResidentCaseId = request.ResidentCaseId,
+            StatusStateId  = request.StatusStateId,
+            ConferenceDate = request.ConferenceDate,
+            OutcomeSummary = request.OutcomeSummary ?? string.Empty,
+        };
+        db.CaseConferences.Add(entity);
+        await db.SaveChangesAsync(ct);
+        await db.Entry(entity).Reference(x => x.StatusState).LoadAsync(ct);
+        return new CaseConferenceItem(
+            entity.Id, entity.ResidentCaseId, entity.ConferenceDate,
+            entity.StatusState?.Name ?? "Unknown",
+            entity.OutcomeSummary);
     }
 }
 

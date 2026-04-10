@@ -132,3 +132,34 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
   })
   return readJson<PagedResult<CaseConferenceItem>>(response, endpoint)
 }
+
+export async function createHomeVisit(payload: {
+  residentCaseId: string
+  visitTypeId: number
+  statusStateId: number
+  visitDate: string
+  notes: string
+}): Promise<HomeVisitItem> {
+  const endpoint = '/api/admin/visitation-conferences/visits'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  return readJson<HomeVisitItem>(response, endpoint, 'POST')
+}
+
+export async function createCaseConference(payload: {
+  residentCaseId: string
+  statusStateId: number
+  conferenceDate: string
+  outcomeSummary: string
+}): Promise<CaseConferenceItem> {
+  const endpoint = '/api/admin/visitation-conferences/conferences'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  return readJson<CaseConferenceItem>(response, endpoint, 'POST')
+}
