@@ -146,7 +146,16 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+        var configuredOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+        var flattenedOrigins = (builder.Configuration["AllowedOrigins"] ?? string.Empty)
+            .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var allowedOrigins = configuredOrigins
+            .Concat(flattenedOrigins)
+            .Select(origin => origin.Trim().TrimEnd('/'))
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         if (allowedOrigins.Length > 0)
         {
             policy.WithOrigins(allowedOrigins)
