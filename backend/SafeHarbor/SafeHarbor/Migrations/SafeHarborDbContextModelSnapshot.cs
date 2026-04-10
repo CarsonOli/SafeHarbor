@@ -375,7 +375,8 @@ namespace SafeHarbor.Migrations
                         .HasColumnName("id");
 
                     b.Property<bool>("ConcernsFlagged")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("concerns_flagged");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -391,45 +392,55 @@ namespace SafeHarbor.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("EmotionalStateEnd")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("emotional_state_end");
 
                     b.Property<string>("EmotionalStateObserved")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("emotional_state_observed");
 
                     b.Property<string>("FollowUpActions")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("follow_up_actions");
 
                     b.Property<string>("InterventionsApplied")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("interventions_applied");
 
                     b.Property<string>("NotesRestricted")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("notes_restricted");
 
                     b.Property<bool>("ProgressNoted")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("progress_noted");
 
                     b.Property<DateTimeOffset>("RecordedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("recorded_at");
 
                     b.Property<bool>("ReferralMade")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("referral_made");
 
                     b.Property<Guid>("ResidentCaseId")
                         .HasColumnType("uuid")
                         .HasColumnName("resident_case_id");
 
                     b.Property<int?>("SessionDurationMinutes")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("session_duration_minutes");
 
                     b.Property<string>("SessionType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("session_type");
 
                     b.Property<string>("SocialWorker")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("social_worker");
 
                     b.Property<string>("Summary")
                         .IsRequired()
