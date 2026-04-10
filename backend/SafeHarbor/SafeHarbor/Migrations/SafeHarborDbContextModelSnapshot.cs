@@ -17,6 +17,7 @@ namespace SafeHarbor.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("lighthouse")
                 .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -61,7 +62,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("Campaigns");
+                    b.ToTable("campaigns", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.CaseConference", b =>
@@ -102,7 +103,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("CaseConferences");
+                    b.ToTable("case_conferences", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Contribution", b =>
@@ -157,7 +158,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("Contributions");
+                    b.ToTable("contributions", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ContributionAllocation", b =>
@@ -195,7 +196,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("SafehouseId");
 
-                    b.ToTable("ContributionAllocations");
+                    b.ToTable("contribution_allocations", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Donor", b =>
@@ -247,7 +248,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Donors");
+                    b.ToTable("donors", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.HomeVisit", b =>
@@ -293,7 +294,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("VisitTypeId");
 
-                    b.ToTable("HomeVisits");
+                    b.ToTable("home_visits", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.InterventionPlan", b =>
@@ -337,7 +338,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("InterventionPlans");
+                    b.ToTable("intervention_plans", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ProcessRecording", b =>
@@ -373,7 +374,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("ResidentCaseId");
 
-                    b.ToTable("ProcessRecordings");
+                    b.ToTable("process_recordings", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ResidentAssessment", b =>
@@ -414,7 +415,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("ResidentAssessments");
+                    b.ToTable("resident_assessments", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.ResidentCase", b =>
@@ -469,7 +470,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("StatusStateId");
 
-                    b.ToTable("ResidentCases");
+                    b.ToTable("resident_cases", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Role", b =>
@@ -497,7 +498,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles");
+                    b.ToTable("roles", "lighthouse");
 
                     b.HasData(
                         new
@@ -547,7 +548,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Safehouses");
+                    b.ToTable("safehouses", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.SocialPostMetric", b =>
@@ -600,7 +601,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("CampaignId");
 
-                    b.ToTable("SocialPostMetrics");
+                    b.ToTable("social_post_metrics", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.UserProfile", b =>
@@ -636,7 +637,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserProfiles");
+                    b.ToTable("user_profiles", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.UserRole", b =>
@@ -654,7 +655,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRoles");
+                    b.ToTable("user_roles", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.CaseCategory", b =>
@@ -688,7 +689,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CaseCategory");
+                    b.ToTable("case_category", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.CaseSubcategory", b =>
@@ -727,7 +728,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasIndex("CaseCategoryId");
 
-                    b.ToTable("CaseSubcategory");
+                    b.ToTable("case_subcategory", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.ContributionType", b =>
@@ -761,7 +762,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ContributionType");
+                    b.ToTable("contribution_type", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Lookups.StatusState", b =>
@@ -798,7 +799,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StatusState");
+                    b.ToTable("status_state", "lighthouse");
 
                     b.HasData(
                         new
@@ -864,7 +865,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("VisitType");
+                    b.ToTable("visit_type", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Resident", b =>
@@ -896,7 +897,7 @@ namespace SafeHarbor.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Residents");
+                    b.ToTable("residents", "lighthouse");
                 });
 
             modelBuilder.Entity("SafeHarbor.Models.Entities.Campaign", b =>
