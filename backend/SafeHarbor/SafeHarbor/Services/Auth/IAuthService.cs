@@ -10,7 +10,7 @@ public interface IAuthService
     Task<DomainProfileReconciliationResult> ReconcileDomainProfilesAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed record RegisterAuthRequest(string Email, string Role, string Password, string? FirstName = null, string? LastName = null);
+public sealed record RegisterAuthRequest(string Email, string Password, string FirstName, string LastName);
 public sealed record LoginAuthRequest(string Email, string Password, string? Role = null);
 
 public sealed record AuthRegisterResult(bool Succeeded, string? ErrorCode = null, string? Error = null);

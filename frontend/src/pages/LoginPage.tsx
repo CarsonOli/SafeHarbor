@@ -1,14 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { registerLocalDevelopmentAccount, requestLocalDevelopmentToken } from '../services/localAuthApi'
-import type { AppRole } from '../auth/authSession'
 
 type LocationState = { from?: { pathname?: string } } | null
 
 type AuthMode = 'signin' | 'register'
-
-const registrationRoles: AppRole[] = ['Donor', 'SocialWorker', 'Admin']
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -17,7 +14,8 @@ export function LoginPage() {
   const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [registrationRole, setRegistrationRole] = useState<AppRole>('Donor')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,7 +34,7 @@ export function LoginPage() {
     const normalizedPassword = password.trim()
 
     if (!normalizedEmail) {
-      setError('Please enter your work email.')
+      setError('Please enter your email.')
       return null
     }
 
@@ -48,7 +46,7 @@ export function LoginPage() {
     return { email: normalizedEmail, password: normalizedPassword }
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
     setStatusMessage(null)
@@ -62,17 +60,33 @@ export function LoginPage() {
 
     try {
       if (mode === 'register') {
+        const normalizedFirstName = firstName.trim()
+        const normalizedLastName = lastName.trim()
+        if (!normalizedFirstName) {
+          setError('Please enter your first name.')
+          setIsSubmitting(false);
+          return
+        }
+        if (!normalizedLastName) {
+          setError('Please enter your last name.')
+          setIsSubmitting(false);
+          return
+        }
+
         // Keep account creation in the same screen as sign-in so deployed users who start from
         // /login can recover immediately without guessing a hidden route.
         await registerLocalDevelopmentAccount({
           email: credentials.email,
           password: credentials.password,
-          role: registrationRole,
+          firstName: normalizedFirstName,
+          lastName: normalizedLastName,
         })
 
         setStatusMessage('Account created successfully. You can sign in now.')
         setMode('signin')
-      } else {
+      }
+      
+      else {
         // Keep frontend login behavior on backend-issued JWTs so browser routing and
         // API authorization both rely on the same token source.
         const idToken = await requestLocalDevelopmentToken(credentials.email, credentials.password)
@@ -93,8 +107,8 @@ export function LoginPage() {
         <h1 id="login-title">{mode === 'signin' ? 'Sign in' : 'Create account'}</h1>
         <p className="caption">
           {mode === 'signin'
-            ? 'Use your Safe Harbor email and password to continue.'
-            : 'Create a new Safe Harbor account using your email, password, and role.'}
+            ? 'Use your email and password to continue.'
+            : 'Create a new Safe Harbor account using your name, email, and password.'}
         </p>
 
         {statusMessage && <p className="form-success">{statusMessage}</p>}
@@ -106,7 +120,7 @@ export function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <label htmlFor="email">Work email</label>
+          <label htmlFor="email">Email</label>
           <input
             id="email"
             name="email"
@@ -127,19 +141,23 @@ export function LoginPage() {
 
           {mode === 'register' && (
             <>
-              <label htmlFor="role">Role</label>
-              <select
-                id="role"
-                name="role"
-                value={registrationRole}
-                onChange={(event) => setRegistrationRole(event.target.value as AppRole)}
-              >
-                {registrationRoles.map((roleOption) => (
-                  <option key={roleOption} value={roleOption}>
-                    {roleOption}
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="firstName">First name</label>
+              <input
+                id="firstName"
+                name="firstName"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+              />
+
+              <label htmlFor="lastName">Last name</label>
+              <input
+                id="lastName"
+                name="lastName"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+              />
             </>
           )}
 

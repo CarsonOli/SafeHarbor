@@ -16,9 +16,9 @@ public sealed class InMemoryDataStore
     // TODO: Replace InMemoryDataStore with a database-backed repository once infrastructure is available.
     public List<Resident> Residents { get; } = [];
 
-    // NOTE: Keep this collection empty so no synthetic financial records are mistaken for real donor data.
+    // NOTE: Keep this collection empty so no synthetic financial records are mistaken for real supporter data.
     // Seeding is done explicitly via DonorDashboardSeeder, not here.
-    public List<SafeHarbor.Models.Entities.Donor> Donors { get; } = [];
+    public List<SafeHarbor.Models.Entities.Supporter> Supporters { get; } = [];
 
     /// <summary>Fundraising campaigns. Populated by DonorDashboardSeeder at startup.</summary>
     public List<Campaign> Campaigns { get; } = [];
@@ -26,3 +26,5 @@ public sealed class InMemoryDataStore
     /// <summary>Individual donation records. Populated by DonorDashboardSeeder and by POST /api/donor/contribution.</summary>
     public List<Contribution> Contributions { get; } = [];
 }
+
+

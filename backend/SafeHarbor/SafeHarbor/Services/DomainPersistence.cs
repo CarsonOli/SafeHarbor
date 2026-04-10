@@ -17,11 +17,11 @@ public interface IResidentRepository
 
 public interface IDonorRepository
 {
-    Task<IReadOnlyList<Donor>> ListAsync(CancellationToken ct);
-    Task<Donor?> FindAsync(Guid id, CancellationToken ct);
-    Task<Donor?> FindByEmailAsync(string email, CancellationToken ct);
-    Task<Donor> CreateAsync(Donor donor, CancellationToken ct);
-    Task<Donor?> UpdateAsync(Donor donor, CancellationToken ct);
+    Task<IReadOnlyList<Supporter>> ListAsync(CancellationToken ct);
+    Task<Supporter?> FindAsync(Guid id, CancellationToken ct);
+    Task<Supporter?> FindByEmailAsync(string email, CancellationToken ct);
+    Task<Supporter> CreateAsync(Supporter supporter, CancellationToken ct);
+    Task<Supporter?> UpdateAsync(Supporter supporter, CancellationToken ct);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct);
 }
 
@@ -34,7 +34,7 @@ public interface ICampaignRepository
 public interface IContributionRepository
 {
     Task<IReadOnlyList<Contribution>> ListCompletedAsync(CancellationToken ct);
-    Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid donorId, CancellationToken ct);
+    Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid supporterId, CancellationToken ct);
     Task<Contribution> AddAsync(Contribution contribution, CancellationToken ct);
 }
 
@@ -66,11 +66,12 @@ public interface IPublicRecordsService
 
 public interface IDonorDashboardService
 {
-    Task<DonorDashboardResponse?> GetDashboardAsync(Guid? donorId, string? email, CancellationToken ct);
-    Task<NewContributionResponse?> AddContributionAsync(Guid? donorId, string? email, NewContributionRequest request, CancellationToken ct);
+    Task<DonorDashboardResponse?> GetDashboardAsync(Guid? supporterId, string? email, CancellationToken ct);
+    Task<NewContributionResponse?> AddContributionAsync(Guid? supporterId, string? email, NewContributionRequest request, CancellationToken ct);
 }
 
 public interface IDonorAnalyticsService
 {
     Task<DonorAnalyticsResponse> GetAnalyticsAsync(CancellationToken ct);
 }
+

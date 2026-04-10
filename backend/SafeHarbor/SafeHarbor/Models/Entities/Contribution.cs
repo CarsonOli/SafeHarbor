@@ -5,7 +5,7 @@ namespace SafeHarbor.Models.Entities;
 public class Contribution : AuditableEntity
 {
     public Guid Id { get; set; }
-    public Guid DonorId { get; set; }
+    public Guid SupporterId { get; set; }
     public Guid? CampaignId { get; set; }
     public int ContributionTypeId { get; set; }
     public int StatusStateId { get; set; }
@@ -17,10 +17,11 @@ public class Contribution : AuditableEntity
     
     public DateTimeOffset ContributionDate { get; set; }
 
-    public Donor? Donor { get; set; }
+    public Supporter? Supporter { get; set; }
     public Campaign? Campaign { get; set; }
     public ContributionType? ContributionType { get; set; }
     public StatusState? StatusState { get; set; }
     
     public ICollection<ContributionAllocation> Allocations { get; set; } = new List<ContributionAllocation>();
 }
+

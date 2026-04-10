@@ -19,6 +19,7 @@ using SafeHarbor.Services;
 using SafeHarbor.Services.Admin;
 using SafeHarbor.Services.Auth;
 using SafeHarbor.Services.DonorImpact;
+using SafeHarbor.Services.Donations;
 using SafeHarbor.Services.Public;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -194,8 +195,13 @@ builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>(
 builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
 builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
 builder.Services.AddScoped<IDonorContributionService, DonorContributionService>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddScoped<IReportsAnalyticsService, ReportsAnalyticsService>();
 builder.Services.AddScoped<IImpactAggregateService, ImpactAggregateService>();
+builder.Services.AddScoped<IDonorRiskFlagService, DonorRiskFlagService>();
+builder.Services.AddScoped<IResidentReadinessFlagService, ResidentReadinessFlagService>();
+builder.Services.AddHttpClient("MlService");
+builder.Services.AddScoped<IDonationAccessService, DonationAccessService>();
 
 // NOTE: Live/ready probes support platform health checks and safer blue/green swaps.
 builder.Services.AddHealthChecks();

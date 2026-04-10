@@ -52,7 +52,8 @@ public sealed record ResidentCaseListItem(
     string? SocialWorkerExternalId,
     string? ResidentName,
     DateTimeOffset OpenedAt,
-    DateTimeOffset? ClosedAt);
+    DateTimeOffset? ClosedAt,
+    Guid? ResidentEntityId = null);
 
 public sealed record CreateResidentCaseRequest(
     [property: Required] Guid SafehouseId,
@@ -103,8 +104,35 @@ public sealed record CreateProcessRecordRequest(
     string? NotesRestricted,
     DateTimeOffset? RecordedAt);
 
-public sealed record HomeVisitItem(Guid Id, Guid ResidentCaseId, DateTimeOffset VisitDate, string VisitType, string Status, string Notes);
+public sealed record HomeVisitItem(
+    Guid Id,
+    Guid ResidentCaseId,
+    DateTimeOffset VisitDate,
+    string VisitType,
+    string Status,
+    string HomeEnvironmentObservations,
+    string FamilyCooperationLevel,
+    bool SafetyConcernsIdentified,
+    string FollowUpActions,
+    string Notes);
 public sealed record CaseConferenceItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
+
+public sealed record CreateHomeVisitRequest(
+    [property: Required] Guid ResidentCaseId,
+    [property: Required] int VisitTypeId,
+    [property: Required] int StatusStateId,
+    [property: Required] DateTimeOffset VisitDate,
+    string? HomeEnvironmentObservations,
+    string? FamilyCooperationLevel,
+    bool SafetyConcernsIdentified,
+    string? FollowUpActions,
+    string? Notes);
+
+public sealed record CreateCaseConferenceRequest(
+    [property: Required] Guid ResidentCaseId,
+    [property: Required] int StatusStateId,
+    [property: Required] DateTimeOffset ConferenceDate,
+    string OutcomeSummary);
 
 public sealed record DonationTrendPoint(string Month, decimal Amount);
 public sealed record OutcomeTrendPoint(string Month, int ResidentsServed, int HomeVisits);
@@ -169,3 +197,4 @@ public sealed record ContentTimingRecommendationCard(
     string Title,
     string Rationale,
     string Action);
+

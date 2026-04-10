@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using SafeHarbor.Data;
 
 namespace SafeHarbor.Tests;
 
@@ -66,6 +69,33 @@ public sealed class AdminModuleIntegrationTests : IClassFixture<SafeHarborApiFac
         var envelope = await residentCaseResponse.Content.ReadFromJsonAsync<ApiErrorEnvelopeContract>();
         Assert.NotNull(envelope);
         Assert.Equal("ValidationError", envelope!.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ContributionCreation_UsesSupporterLinkage_EndToEnd()
+    {
+        using var client = CreateAuthenticatedClient("SocialWorker");
+        var seededSupporterId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/admin/donors-contributions/contributions",
+            new
+            {
+                donorId = seededSupporterId,
+                amount = 42.50m,
+                contributionTypeId = 1,
+                statusStateId = 1
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+        var contribution = await db.Contributions
+            .OrderByDescending(x => x.ContributionDate)
+            .FirstAsync(x => x.Amount == 42.50m);
+
+        Assert.Equal(seededSupporterId, contribution.SupporterId);
     }
 
     private HttpClient CreateAuthenticatedClient(string role)

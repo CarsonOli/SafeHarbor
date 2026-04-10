@@ -21,7 +21,16 @@ public sealed record ResidentAdminResponse(
     string CaseWorkerEmail,
     string MedicalNotes,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    // ML readiness fields — appended, nullable
+    int? TotalVisits = null,
+    double? AvgFamilyCooperation = null,
+    double? PctPsychCheckupsDone = null,
+    int? RiskImprovement = null,
+    double? AvgProgressPct = null,
+    bool FamilySoloParent = false,
+    string? CaseCategory = null,
+    double? PctSafetyConcerns = null);
 
 public sealed record ResidentPublicResponse(
     Guid Id,

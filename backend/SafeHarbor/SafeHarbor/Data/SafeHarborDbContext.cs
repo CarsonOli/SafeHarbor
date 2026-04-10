@@ -34,7 +34,7 @@ namespace SafeHarbor.Data
         public DbSet<Safehouse> Safehouses { get; set; }
 
         // --- Fundraising ---
-        public DbSet<Donor> Donors { get; set; }
+        public DbSet<Supporter> Supporters { get; set; }
         public DbSet<Campaign> Campaigns { get; set; }
         public DbSet<Contribution> Contributions { get; set; }
         public DbSet<ContributionAllocation> ContributionAllocations { get; set; }
@@ -50,6 +50,7 @@ namespace SafeHarbor.Data
                 entity.HasKey(u => u.UserId);
 
                 entity.Property(u => u.UserId).HasColumnName("user_id");
+                entity.Property(u => u.SupporterId).HasColumnName("supporter_id");
                 entity.Property(u => u.FirstName).HasColumnName("f_name");
                 entity.Property(u => u.LastName).HasColumnName("l_name");
                 entity.Property(u => u.Email).HasColumnName("email");
@@ -73,9 +74,9 @@ namespace SafeHarbor.Data
                 entity.Property(e => e.UpdatedAtUtc).HasColumnName("updated_at_utc");
             });
 
-            modelBuilder.Entity<Donor>(entity =>
+            modelBuilder.Entity<Supporter>(entity =>
             {
-                entity.ToTable("donors", CanonicalSchema);
+                entity.ToTable("supporters", CanonicalSchema);
                 entity.HasKey(e => e.Id);
 
                 entity.Property(e => e.Id).HasColumnName("id");
@@ -110,7 +111,7 @@ namespace SafeHarbor.Data
                 entity.HasKey(e => e.Id);
 
                 entity.Property(e => e.Id).HasColumnName("id");
-                entity.Property(e => e.DonorId).HasColumnName("donor_id");
+                entity.Property(e => e.SupporterId).HasColumnName("supporter_id");
                 entity.Property(e => e.CampaignId).HasColumnName("campaign_id");
                 entity.Property(e => e.ContributionTypeId).HasColumnName("contribution_type_id");
                 entity.Property(e => e.StatusStateId).HasColumnName("status_state_id");
@@ -198,6 +199,10 @@ namespace SafeHarbor.Data
                 entity.Property(e => e.VisitTypeId).HasColumnName("visit_type_id");
                 entity.Property(e => e.StatusStateId).HasColumnName("status_state_id");
                 entity.Property(e => e.VisitDate).HasColumnName("visit_date");
+                entity.Property(e => e.HomeEnvironmentObservations).HasColumnName("home_environment_observations");
+                entity.Property(e => e.FamilyCooperationLevel).HasColumnName("family_cooperation_level");
+                entity.Property(e => e.SafetyConcernsIdentified).HasColumnName("safety_concerns_identified");
+                entity.Property(e => e.FollowUpActions).HasColumnName("follow_up_actions");
                 entity.Property(e => e.Notes).HasColumnName("notes");
                 MapAuditColumns(entity);
             });
@@ -373,3 +378,5 @@ namespace SafeHarbor.Data
         }
     }
 }
+
+

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SafeHarbor.Auth;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
+using SafeHarbor.Services.Donations;
 
 namespace SafeHarbor.Services.Auth;
 
@@ -15,10 +16,10 @@ public sealed class AuthService(
     SafeHarborDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
     IOptions<PasswordPolicyOptions> passwordPolicyOptions,
-    IDomainProfileProvisioningService domainProfileProvisioningService) : IAuthService
+    IDomainProfileProvisioningService domainProfileProvisioningService,
+    IDonationAccessService donationAccessService) : IAuthService
 {
-    private static readonly HashSet<string> SupportedDatabaseRoles =
-        ["admin", "staff", "user"];
+    private const string SelfRegisteredDatabaseRole = "user";
 
     // NOTE: This alias map is the single source for accepted role vocabulary on inbound auth requests.
     // It intentionally allows both DB role values (admin/staff/user) and app policy roles
@@ -43,10 +44,16 @@ public sealed class AuthService(
             return new AuthRegisterResult(false, "ValidationError", "Email is required.");
         }
 
-        var normalizedRole = NormalizeToDatabaseRole(request.Role);
-        if (normalizedRole is null || !SupportedDatabaseRoles.Contains(normalizedRole))
+        var normalizedFirstName = request.FirstName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedFirstName))
         {
-            return new AuthRegisterResult(false, "ValidationError", "Role must be one of: admin, staff, user.");
+            return new AuthRegisterResult(false, "ValidationError", "First name is required.");
+        }
+
+        var normalizedLastName = request.LastName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLastName))
+        {
+            return new AuthRegisterResult(false, "ValidationError", "Last name is required.");
         }
 
         var passwordValidationError = ValidatePasswordAgainstPolicy(request.Password);
@@ -69,10 +76,12 @@ public sealed class AuthService(
         var user = new User
         {
             UserId = Guid.NewGuid(),
-            FirstName = request.FirstName?.Trim() ?? string.Empty,
-            LastName = request.LastName?.Trim() ?? string.Empty,
+            FirstName = normalizedFirstName,
+            LastName = normalizedLastName,
             Email = normalizedEmail,
-            Role = normalizedRole,
+            // SECURITY: self-service registration is always donor/user role.
+            // Elevated roles are provisioned through controlled admin workflows only.
+            Role = SelfRegisteredDatabaseRole,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -81,6 +90,19 @@ public sealed class AuthService(
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         dbContext.Users.Add(user);
+        // NOTE: user accounts stay auth-focused, but donor ownership lives in supporters.
+        // When a supporter profile exists (or can be created), link it via users.supporter_id.
+        user.SupporterId = await donationAccessService.EnsureSupporterForEmailAsync(
+            user.Email,
+            user.FirstName,
+            user.LastName,
+            cancellationToken);
+        if (user.SupporterId is null)
+        {
+            // NOTE: donor-facing flows depend on user -> supporter linkage. Fail fast so
+            // operators can fix schema mismatches instead of creating partially-linked users.
+            return new AuthRegisterResult(false, "ProvisioningError", "Unable to provision supporter profile for this account.");
+        }
         await domainProfileProvisioningService.EnsureProvisionedForUserAsync(
             user.UserId,
             user.Email,

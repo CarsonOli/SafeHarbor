@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchCaseloadLookups, fetchResidentCases, deleteResidentCase } from '../../services/adminOperationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
+import { ReadinessBadge } from '../../components/ReadinessBadge'
 import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
 import { useAuth } from '../../auth/AuthContext'
 
@@ -36,7 +37,7 @@ function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem
   const shortId = item.id.split('-')[0].toUpperCase()
   return (
     <tr>
-      <td colSpan={7} style={{ padding: '0 1rem 0.75rem 1rem', background: '#f8fafc' }}>
+      <td colSpan={hasReadiness ? 8 : 7} style={{ padding: '0 1rem 0.75rem 1rem', background: '#f8fafc' }}>
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -93,6 +94,9 @@ export function CaseloadInventoryPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Secondary readiness flag fetch — silent fallback on error
+  const [readinessFlags, setReadinessFlags] = useState<Map<string, ResidentReadinessFlag>>(new Map())
+
   // filters
   const [search, setSearch] = useState('')
   const [statusStateId, setStatusStateId] = useState('')
@@ -117,6 +121,25 @@ export function CaseloadInventoryPage() {
     fetchCaseloadLookups()
       .then(setLookups)
       .catch(() => {/* non-fatal */})
+  }, [])
+
+  // Load readiness flags once on mount — independent of pagination
+  useEffect(() => {
+    let cancelled = false
+    async function loadFlags() {
+      try {
+        const flags = await fetchResidentReadinessFlags()
+        if (!cancelled) {
+          const map = new Map<string, ResidentReadinessFlag>()
+          for (const f of flags) map.set(f.residentId, f)
+          setReadinessFlags(map)
+        }
+      } catch {
+        // Silent fallback — readiness column simply won't render
+      }
+    }
+    void loadFlags()
+    return () => { cancelled = true }
   }, [])
 
   // load cases when filters change
@@ -267,20 +290,21 @@ export function CaseloadInventoryPage() {
               <th style={thStyle}>Safehouse</th>
               <th style={thStyle}>Social Worker</th>
               <th style={thStyle}>Opened</th>
+              {readinessFlags.size > 0 && <th style={thStyle}>Readiness</th>}
               <th style={{ ...thStyle, textAlign: 'center' }}>Details</th>
             </tr>
           </thead>
           <tbody>
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                <td colSpan={readinessFlags.size > 0 ? 8 : 7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
                   {hasFilters ? 'No cases match your filters.' : 'No cases found.'}
                 </td>
               </tr>
             )}
             {loading && items.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                <td colSpan={readinessFlags.size > 0 ? 8 : 7} style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
                   Loading cases…
                 </td>
               </tr>
@@ -307,6 +331,16 @@ export function CaseloadInventoryPage() {
                   <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>
                     {new Date(item.openedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </td>
+                  {readinessFlags.size > 0 && (
+                    <td style={tdStyle}>
+                      {item.residentEntityId && readinessFlags.has(item.residentEntityId) && (
+                        <ReadinessBadge
+                          level={readinessFlags.get(item.residentEntityId)!.level}
+                          action={readinessFlags.get(item.residentEntityId)!.action}
+                        />
+                      )}
+                    </td>
+                  )}
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button
                       onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}

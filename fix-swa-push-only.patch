@@ -1,0 +1,42 @@
+diff --git a/.github/workflows/azure-static-web-apps-salmon-field-09afc320f.yml b/.github/workflows/azure-static-web-apps-salmon-field-09afc320f.yml
+--- a/.github/workflows/azure-static-web-apps-salmon-field-09afc320f.yml
++++ b/.github/workflows/azure-static-web-apps-salmon-field-09afc320f.yml
+@@ -3,26 +3,19 @@ name: Azure Static Web Apps CI/CD
+ on:
+   push:
+     branches:
+       - deployment
+-  pull_request:
+-    types: [opened, synchronize, reopened, closed]
+-    branches:
+-      - deployment
+
+ jobs:
+   build_and_deploy_job:
+-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
++    if: github.event_name == 'push'
+     runs-on: ubuntu-latest
+     name: Build and Deploy Job
+     permissions:
+        id-token: write
+        contents: read
+     steps:
+@@ -39,16 +32,3 @@ jobs:
+           # NOTE: Force a production build so SWA serves compiled JS assets instead of raw /src/*.tsx modules.
+           app_build_command: "npm run build"
+           github_id_token: ${{ steps.idtoken.outputs.result }}
+           ###### End of Repository/Build Configurations ######
+-
+-  close_pull_request_job:
+-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+-    runs-on: ubuntu-latest
+-    name: Close Pull Request Job
+-    steps:
+-      - name: Close Pull Request
+-        id: closepullrequest
+-        uses: Azure/static-web-apps-deploy@v1
+-        with:
+-          # NOTE: The close action must authenticate to remove the PR staging environment.
+-          # Without the API token, preview environments accumulate until the SWA quota is exhausted.
+-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+-          action: "close"

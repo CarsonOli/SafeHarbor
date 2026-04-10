@@ -1,36 +1,60 @@
-import { useEffect, useState } from 'react'
-import { createDonor, fetchDonors } from '../../services/adminOperationsApi'
-import { toUserFacingError } from '../../services/httpErrors'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { ApiErrorNotice } from '../../components/ApiErrorNotice'
-import type { DonorListItem } from '../../types/adminOperations'
+import { fetchAllDonations } from '../../services/donationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
+import type { DonationFilters, DonationListItem } from '../../types/donations'
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+}
+
+function toDateInput(value: string | null): string {
+  if (!value) return ''
+  return value.slice(0, 10)
+}
 
 export function DonorsContributionsPage() {
-  const [items, setItems] = useState<DonorListItem[]>([])
+  const [items, setItems] = useState<DonationListItem[]>([])
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(10)
-  const [search, setSearch] = useState('')
+  const [pageSize] = useState(20)
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [success, setSuccess] = useState<string | null>(null)
+
+  const [filters, setFilters] = useState<DonationFilters>({
+    fromDate: '',
+    toDate: '',
+    donationType: '',
+    campaign: '',
+    channelSource: '',
+    supporterType: '',
+    frequency: '',
+  })
+
+  const hasFilters = useMemo(
+    () => Object.values(filters).some((value) => typeof value === 'string' && value.trim().length > 0),
+    [filters],
+  )
 
   useEffect(() => {
     let cancelled = false
+
     async function load() {
       try {
         setLoading(true)
         setError(null)
-        const data = await fetchDonors({ page, pageSize, search: search || undefined, desc: true })
-        if (!cancelled) {
-          setItems(data.items)
-          setTotalCount(data.totalCount)
-        }
+        const payload = await fetchAllDonations({ ...filters, page, pageSize })
+        if (cancelled) return
+        setItems(payload.items)
+        setTotalCount(payload.totalCount)
       } catch (err) {
-        if (!cancelled) setError(toUserFacingError(err, 'Failed to load donors'))
+        if (!cancelled) {
+          setError(toUserFacingError(err, 'Failed to load donations'))
+        }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
@@ -38,71 +62,158 @@ export function DonorsContributionsPage() {
     return () => {
       cancelled = true
     }
-  }, [page, pageSize, search])
-
-  async function handleCreateDonor(event: React.FormEvent) {
-    event.preventDefault()
-    setSuccess(null)
-    setError(null)
-    try {
-      await createDonor(name, email)
-      setSuccess('Donor saved successfully.')
-      setName('')
-      setEmail('')
-      setPage(1)
-      const data = await fetchDonors({ page: 1, pageSize, desc: true })
-      setItems(data.items)
-      setTotalCount(data.totalCount)
-    } catch (err) {
-      setError(toUserFacingError(err, 'Failed to save donor'))
-    }
-  }
+  }, [filters, page, pageSize])
 
   return (
     <section>
-      <h1>Donors & Contributions</h1>
-      <p className="lead">Manage donor profiles, contribution logs, and allocation tracking.</p>
-      <form className="feature-card" onSubmit={handleCreateDonor}>
-        <h2>Create donor</h2>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
-        <input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <button className="button" type="submit">Save donor</button>
-      </form>
+      <h1>Donations</h1>
+      <p className="lead">View all donation transactions with supporter identity from the CRM profile.</p>
+
+      <article className="feature-card">
+        <h2>Filters</h2>
+        <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <label>
+            From date
+            <input
+              type="date"
+              value={filters.fromDate}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, fromDate: e.target.value }))
+              }}
+            />
+          </label>
+          <label>
+            To date
+            <input
+              type="date"
+              value={filters.toDate}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, toDate: e.target.value }))
+              }}
+            />
+          </label>
+          <label>
+            Donation type
+            <input
+              value={filters.donationType}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, donationType: e.target.value }))
+              }}
+              placeholder="Cash, In-kind..."
+            />
+          </label>
+          <label>
+            Campaign
+            <input
+              value={filters.campaign}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, campaign: e.target.value }))
+              }}
+              placeholder="Campaign name"
+            />
+          </label>
+          <label>
+            Channel/source
+            <input
+              value={filters.channelSource}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, channelSource: e.target.value }))
+              }}
+              placeholder="Online, Event..."
+            />
+          </label>
+          <label>
+            Supporter type
+            <input
+              value={filters.supporterType}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, supporterType: e.target.value }))
+              }}
+              placeholder="Individual, Organization..."
+            />
+          </label>
+          <label>
+            Frequency
+            <input
+              value={filters.frequency}
+              onChange={(e) => {
+                setPage(1)
+                setFilters((current) => ({ ...current, frequency: e.target.value }))
+              }}
+              placeholder="One-time, Monthly..."
+            />
+          </label>
+        </div>
+        {hasFilters && (
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => {
+              setPage(1)
+              setFilters({
+                fromDate: '',
+                toDate: '',
+                donationType: '',
+                campaign: '',
+                channelSource: '',
+                supporterType: '',
+                frequency: '',
+              })
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </article>
 
       <article className="feature-card" style={{ marginTop: '1rem' }}>
-        <h2>Donor profiles</h2>
-        <input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(1)
-          }}
-          placeholder="Filter by name or email"
-        />
-        {loading && <p role="status">Loading donors…</p>}
+        <h2>Donation transactions</h2>
+        {loading && <p role="status">Loading donations...</p>}
         {error && <ApiErrorNotice error={error} />}
-        {success && <p role="status">{success}</p>}
-        {!loading && !error && (
+        {!loading && !error && items.length === 0 && (
+          <p>No donations matched your current filters.</p>
+        )}
+        {!loading && !error && items.length > 0 && (
           <>
             <table>
               <thead>
-                <tr><th>Name</th><th>Email</th><th>Last activity</th><th>Lifetime</th></tr>
+                <tr>
+                  <th>Date</th>
+                  <th>Donor</th>
+                  <th>Type</th>
+                  <th>Campaign</th>
+                  <th>Channel</th>
+                  <th>Amount</th>
+                  <th>In-kind Est.</th>
+                </tr>
               </thead>
               <tbody>
-                {items.map((x) => (
-                  <tr key={x.id}>
-                    <td>{x.name}</td>
-                    <td>{x.email}</td>
-                    <td>{new Date(x.lastActivityAt).toLocaleDateString()}</td>
-                    <td>${x.lifetimeContributions.toFixed(2)}</td>
+                {items.map((donation) => (
+                  <tr key={donation.donationId}>
+                    <td>{toDateInput(donation.donationDate)}</td>
+                    <td>
+                      {donation.donorDisplayName}
+                      {donation.supporterEmail ? <div>{donation.supporterEmail}</div> : null}
+                    </td>
+                    <td>{donation.donationType}</td>
+                    <td>{donation.campaignName ?? '-'}</td>
+                    <td>{donation.channelSource ?? '-'}</td>
+                    <td>{formatCurrency(donation.amount)}</td>
+                    <td>{formatCurrency(donation.estimatedValue)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div>
-              <button disabled={page <= 1} onClick={() => setPage((v) => v - 1)}>Previous</button>
+            <div style={{ marginTop: '0.75rem' }}>
+              <button disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button>
               <span> Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))} </span>
-              <button disabled={page * pageSize >= totalCount} onClick={() => setPage((v) => v + 1)}>Next</button>
+              <button disabled={page * pageSize >= totalCount} onClick={() => setPage((current) => current + 1)}>Next</button>
             </div>
           </>
         )}

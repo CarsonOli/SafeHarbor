@@ -11,6 +11,7 @@ namespace SafeHarbor.Services.LocalAuth;
 public sealed class PostgresLocalAccountStore(IConfiguration configuration) : ILocalAccountStore
 {
     private static readonly HashSet<string> AllowedRoles = ["Admin", "SocialWorker", "Donor"];
+    private const string DefaultRegistrationRole = "Donor";
 
     private NpgsqlConnection OpenConnection()
     {
@@ -25,7 +26,7 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
     // It consumes the shared auth DTOs to avoid coupling to controller-local request types.
     public bool TryCreateAccount(RegisterAuthRequest request, out string? error)
     {
-        error = ValidateRequest(request.Email, request.Role, request.Password);
+        error = ValidateRegistrationRequest(request.Email, request.Password);
         if (error is not null) return false;
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
@@ -38,7 +39,8 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
                 "INSERT INTO auth_accounts (email, password_hash, role) VALUES (@email, @hash, @role)", connection);
             cmd.Parameters.AddWithValue("email", normalizedEmail);
             cmd.Parameters.AddWithValue("hash", passwordHash);
-            cmd.Parameters.AddWithValue("role", request.Role);
+            // SECURITY: Self-service registrations are always donor-level.
+            cmd.Parameters.AddWithValue("role", DefaultRegistrationRole);
             cmd.ExecuteNonQuery();
             return true;
         }
@@ -88,6 +90,13 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
     {
         if (string.IsNullOrWhiteSpace(email)) return "Email is required.";
         if (string.IsNullOrWhiteSpace(role) || !AllowedRoles.Contains(role)) return $"Role must be one of: {string.Join(", ", AllowedRoles)}.";
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8) return "Password is required and must be at least 8 characters.";
+        return null;
+    }
+
+    private static string? ValidateRegistrationRequest(string email, string password)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return "Email is required.";
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8) return "Password is required and must be at least 8 characters.";
         return null;
     }

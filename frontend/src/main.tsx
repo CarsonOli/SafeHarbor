@@ -15,11 +15,26 @@ import { ProcessRecordingPage } from './pages/app/ProcessRecordingPage'
 import { HomeVisitationConferencesPage } from './pages/app/HomeVisitationConferencesPage'
 import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
-import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
 import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 import AdminContributionsPage from './pages/app/AdminContributionsPage'
 import SocialMediaStrategy from './pages/SocialMediaStrategy'
+import { SocialMediaScorerPage } from './pages/app/SocialMediaScorerPage'
+
+// ── THEME INITIALIZATION ──────────────────────────────────────────────────
+// This runs before React boots to prevent the "white flash" on page load.
+// It checks the cookie and applies the .dark class to the <html> tag.
+const themeCookie = document.cookie
+  .split('; ')
+  .find((row) => row.startsWith('theme='))
+  ?.split('=')[1];
+
+if (themeCookie === 'dark') {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 export const appRoutes = [
   {
@@ -36,7 +51,10 @@ export const appRoutes = [
       {
         path: 'donor',
         element: <ProtectedRoute allowedRoles={['Donor']} />,
-        children: [{ path: 'dashboard', element: <YourDonationsPage /> }],
+        children: [
+          { path: 'dashboard', element: <YourDonationsPage /> },
+          { path: 'donations', element: <YourDonationsPage /> },
+        ],
       },
       // Donation UX decision:
       // /donate stays public so guests can complete the "continue as guest" flow,
@@ -49,11 +67,6 @@ export const appRoutes = [
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
           { path: 'donors', element: <DonorsContributionsPage /> },
-          {
-            path: 'donor-analytics',
-            element: <ProtectedRoute allowedRoles={['Admin']} />,
-            children: [{ index: true, element: <AdminDonorAnalyticsPage /> }],
-          },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
           {
             path: 'contributions',
@@ -68,6 +81,11 @@ export const appRoutes = [
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
           { path: 'reports', element: <ReportsAnalyticsPage /> },
           { path: 'social-media', element: <SocialMediaStrategy /> },
+          {
+            path: 'social-media-scorer',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <SocialMediaScorerPage /> }],
+          },
         ],
       },
     ],

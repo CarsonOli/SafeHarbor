@@ -10,11 +10,11 @@ export type AppNavRoute = {
 // aligned with endpoints callers can actually invoke.
 export const appNavRoutes: AppNavRoute[] = [
   { to: '/app/dashboard', label: 'Admin Dashboard', roles: ['Admin', 'SocialWorker'] },
-  { to: '/app/donors', label: 'Donors & Contributions', roles: ['Admin', 'SocialWorker'] },
-  { to: '/app/donor-analytics', label: 'Donor Analytics', roles: ['Admin'] },
+  { to: '/app/donors', label: 'Donations', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/caseload', label: 'Caseload', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/contributions', label: 'Manage Contributions', roles: ['Admin'] },
   { to: '/app/process-recording', label: 'Process Recording', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/visitation-conferences', label: 'Visitation & Conferences', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/reports', label: 'Reports', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/social-media-scorer', label: 'Social Media Scorer', roles: ['Admin'] },
 ]
