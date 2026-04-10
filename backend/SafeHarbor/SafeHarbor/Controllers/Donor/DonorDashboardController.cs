@@ -42,10 +42,30 @@ public sealed class DonorDashboardController(
         if (request.Amount <= 0)
             return BadRequest(new { error = "Amount must be greater than zero." });
 
+        var userId = ResolveUserId();
+        if (userId is null)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated user id claim is required." });
+        }
+
         var (donorId, donorEmail) = ResolveIdentityClaims();
         if (donorId is null && string.IsNullOrWhiteSpace(donorEmail))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor identity claim is required." });
+        }
+
+        // NOTE: Prefer supporter-linked donation writes first because several deployed environments
+        // no longer have lighthouse.donors. This avoids avoidable 500s on /api/donor/contribution.
+        var supporterDonationId = await donationAccessService.CreateDonationForCurrentUserAsync(
+            userId.Value,
+            donorEmail,
+            request.Amount,
+            "One-time",
+            ct);
+        if (supporterDonationId is not null)
+        {
+            var syntheticId = ToDeterministicGuid(supporterDonationId.Value);
+            return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
         }
 
         try
@@ -60,28 +80,7 @@ public sealed class DonorDashboardController(
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn)
         {
-            // NOTE: Some deployments use supporter/donations schema without lighthouse.donors.
-            // Fall back to supporter-linked donation writes so donor UX still works.
-            var userId = ResolveUserId();
-            if (userId is null)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated user id claim is required." });
-            }
-
-            var donationId = await donationAccessService.CreateDonationForCurrentUserAsync(
-                userId.Value,
-                donorEmail,
-                request.Amount,
-                "One-time",
-                ct);
-
-            if (donationId is null)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unable to record donation for this account." });
-            }
-
-            var syntheticId = ToDeterministicGuid(donationId.Value);
-            return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unable to record donation for this account." });
         }
     }
 
