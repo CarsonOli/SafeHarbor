@@ -55,8 +55,11 @@ body {
 }
 
 .container {
-  width: min(1100px, calc(100% - 2rem));
+  width: 100%;
+  /* Change this from 800px or 600px to 1200px or even 1400px */
+  max-width: 1200px; 
   margin: 0 auto;
+  padding: 0 2rem; /* Keeps a small "breathing room" on the edges */
 }
 
 .skip-link {
@@ -191,8 +194,10 @@ body {
 }
 
 .page-content {
-  padding-top: var(--space-8);
+  margin-top: 120px !important; 
   padding-bottom: var(--space-8);
+  display: block;
+  position: relative;
 }
 
 h1,
@@ -539,8 +544,14 @@ select {
 /* Row container for side-by-side inputs (State + ZIP, Expiry + CVV) */
 .donate-field-row {
   display: flex;
-  gap: var(--space-3);
+  gap: 1.5rem; /* Creates the space between the two columns */
+  width: 100%;
   align-items: flex-start;
+}
+
+.donate-field-row > div {
+  display: flex;
+  flex-direction: column; /* Forces Label to stay on top of Input */
 }
 
 /* "$" prefix + amount input row */
@@ -1056,6 +1067,24 @@ select {
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* 3. THE PURPLE LINK FIX */
+/* This targets all links inside the footer */
+.site-footer a {
+  color: white !important;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.site-footer a:visited {
+  color: white !important; /* Forces it to stay white after clicking */
+}
+
+.site-footer a:hover {
+  color: var(--color-accent, #ffd700); /* Adds a subtle gold or accent color on hover */
+  text-decoration: underline;
+}
+
 /* Change the navigation hover effect to use teal */
 .nav-link:hover {
   background: var(--color-secondary);
@@ -1334,4 +1363,9 @@ select {
   .notebook-card:hover {
     transform: translateY(-6px) !important;
   }
+}
+
+.main-wrapper {
+  margin-top: 100px !important; /* Forces the gap even if other styles resist */
+  min-height: 80vh; /* Ensures the page doesn't look empty */
 }

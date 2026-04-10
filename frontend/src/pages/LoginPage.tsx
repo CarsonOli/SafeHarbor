@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { registerLocalDevelopmentAccount, requestLocalDevelopmentToken } from '../services/localAuthApi'
@@ -46,7 +46,7 @@ export function LoginPage() {
     return { email: normalizedEmail, password: normalizedPassword }
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
     setStatusMessage(null)
@@ -64,10 +64,12 @@ export function LoginPage() {
         const normalizedLastName = lastName.trim()
         if (!normalizedFirstName) {
           setError('Please enter your first name.')
+          setIsSubmitting(false);
           return
         }
         if (!normalizedLastName) {
           setError('Please enter your last name.')
+          setIsSubmitting(false);
           return
         }
 
@@ -82,7 +84,9 @@ export function LoginPage() {
 
         setStatusMessage('Account created successfully. You can sign in now.')
         setMode('signin')
-      } else {
+      }
+      
+      else {
         // Keep frontend login behavior on backend-issued JWTs so browser routing and
         // API authorization both rely on the same token source.
         const idToken = await requestLocalDevelopmentToken(credentials.email, credentials.password)
