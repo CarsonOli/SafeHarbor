@@ -44,8 +44,23 @@ function resolveApiBaseCandidates(): string[] {
 }
 
 async function readApiError(response: Response, fallbackMessage: string): Promise<Error> {
-  const errorBody = (await response.json().catch(() => ({}))) as { error?: string }
-  return new Error(errorBody.error ?? fallbackMessage)
+  const errorBody = (await response.json().catch(() => ({}))) as {
+    error?: string
+    Error?: string
+    message?: string
+    Message?: string
+    errorCode?: string
+    ErrorCode?: string
+  }
+
+  const message =
+    errorBody.error ??
+    errorBody.Error ??
+    errorBody.message ??
+    errorBody.Message ??
+    fallbackMessage
+
+  return new Error(message)
 }
 
 async function postLocalAuthJson(endpoint: string, payload: object): Promise<Response> {
