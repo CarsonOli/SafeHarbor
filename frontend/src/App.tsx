@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
+import { appNavRoutes } from './config/appAccess'
 
 function App() {
   const { session, logout } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const isStaff = session?.role === 'Admin' || session?.role === 'SocialWorker'
   const isDonor = session?.role === 'Donor'
+  const role = session?.role
 
   // Build the navigation list based on the logged-in role.
   // - Visitors (no session): see public pages including /donate.
@@ -20,22 +21,14 @@ function App() {
     { to: '/donate', label: 'Donate' },
 
     // Staff-only nav links — hidden from donors and visitors.
-    ...(isStaff
-      ? [
-          { to: '/app/dashboard', label: 'Admin Dashboard' },
-          { to: '/app/donors', label: 'Manage Contributions' },
-          { to: '/app/donor-analytics', label: 'Donor Analytics' },
-          { to: '/app/caseload', label: 'Caseload' },
-          { to: '/app/process-recording', label: 'Process Recording' },
-          { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
-          { to: '/app/reports', label: 'Reports' },
-          { to: '/privacy', label: 'Privacy' },
-        ]
+    ...(role
+      ? appNavRoutes.filter((route) => route.roles?.includes(role)).map(({ to, label }) => ({ to, label }))
       : []),
 
     // Donor-only nav link — shown only when logged in as a Donor.
     ...(isDonor ? [{ to: '/donor/dashboard', label: 'My Donations' }] : []),
 
+    { to: '/privacy', label: 'Privacy' },
     { to: '/login', label: session ? 'Switch User' : 'Login' },
   ]
 

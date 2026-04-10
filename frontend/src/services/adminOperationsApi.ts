@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError, NOT_AUTHORIZED_MESSAGE } from './httpErrors'
 import type {
   PagedResult,
   PagingQuery,
@@ -27,8 +28,13 @@ function toQueryString(query: PagingQuery): string {
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    if (response.status === 403) {
+      // Keep authorization-denied handling explicit so pages can render a clear state.
+      throw new HttpError(403, NOT_AUTHORIZED_MESSAGE)
+    }
+
     const err = (await response.json().catch(() => null)) as ApiErrorEnvelope | null
-    throw new Error(err?.message ?? `Request failed with status ${response.status}`)
+    throw new HttpError(response.status, err?.message ?? `Request failed with status ${response.status}`)
   }
 
   return (await response.json()) as T

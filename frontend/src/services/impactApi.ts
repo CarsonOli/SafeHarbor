@@ -5,6 +5,7 @@ import type {
   SocialPostMetricListItem,
 } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError, NOT_AUTHORIZED_MESSAGE } from './httpErrors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const IMPACT_ENDPOINT = import.meta.env.VITE_IMPACT_AGGREGATE_PATH ?? '/api/impact/aggregate'
@@ -142,11 +143,20 @@ export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse>
     })
 
     if (!response.ok) {
-      throw new Error(`Reports endpoint returned ${response.status}`)
+      if (response.status === 403) {
+        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE)
+      }
+
+      throw new HttpError(response.status, `Reports endpoint returned ${response.status}`)
     }
 
     return (await response.json()) as ReportsAnalyticsResponse
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      // Preserve explicit 403 semantics so staff/donor route mismatches are visible in UI.
+      throw error
+    }
+
     // NOTE: Fallback is explicitly gated so missing backend integrations fail loudly by default.
     if (ENABLE_DEV_FALLBACK) {
       return fallbackReportsData
