@@ -33,6 +33,7 @@ export type ResidentCaseListItem = {
   statusStateId: number
   status: string
   socialWorkerExternalId: string | null
+  residentName: string | null
   openedAt: string
   closedAt: string | null
 }
@@ -41,7 +42,18 @@ export type ProcessRecordItem = {
   id: string
   residentCaseId: string
   recordedAt: string
+  socialWorker: string
+  sessionType: string
+  sessionDurationMinutes: number | null
+  emotionalStateObserved: string
+  emotionalStateEnd: string | null
   summary: string
+  interventionsApplied: string | null
+  followUpActions: string | null
+  progressNoted: boolean
+  concernsFlagged: boolean
+  referralMade: boolean
+  notesRestricted: boolean
 }
 
 export type HomeVisitItem = {

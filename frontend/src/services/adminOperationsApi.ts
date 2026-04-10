@@ -65,13 +65,28 @@ export async function fetchProcessRecordings(query: PagingQuery): Promise<PagedR
   return readJson<PagedResult<ProcessRecordItem>>(response)
 }
 
-export async function createProcessRecording(residentCaseId: string, summary: string): Promise<void> {
+export async function createProcessRecording(payload: {
+  residentCaseId: string
+  socialWorker: string
+  sessionType: string
+  sessionDurationMinutes: number | null
+  emotionalStateObserved: string
+  emotionalStateEnd: string
+  summary: string
+  interventionsApplied: string
+  followUpActions: string
+  progressNoted: boolean
+  concernsFlagged: boolean
+  referralMade: boolean
+  notesRestricted: string
+  recordedAt?: string
+}): Promise<ProcessRecordItem> {
   const response = await fetch(`${API_BASE}/api/admin/process-recordings`, {
     method: 'POST',
     headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-    body: JSON.stringify({ residentCaseId, summary }),
+    body: JSON.stringify(payload),
   })
-  await readJson<unknown>(response)
+  return readJson<ProcessRecordItem>(response)
 }
 
 export async function fetchVisitLogs(query: PagingQuery): Promise<PagedResult<HomeVisitItem>> {

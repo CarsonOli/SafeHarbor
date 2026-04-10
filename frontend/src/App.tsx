@@ -1,11 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
+import { requestLocalDevelopmentToken } from './services/localAuthApi'
+import type { AppRole } from './auth/authSession'
+
+const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
+const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
+const DEV_AUTO_LOGIN_ROLE = import.meta.env.VITE_DEV_AUTO_LOGIN_ROLE as AppRole | undefined
 
 function App() {
-  const { session, logout } = useAuth()
+  const { session, logout, loginWithIdentityToken } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const autoLoginAttempted = useRef(false)
+
+  useEffect(() => {
+    if (autoLoginAttempted.current || session || !DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD || !DEV_AUTO_LOGIN_ROLE) return
+    autoLoginAttempted.current = true
+    void requestLocalDevelopmentToken(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_ROLE, DEV_AUTO_LOGIN_PASSWORD)
+      .then((idToken) => loginWithIdentityToken(idToken))
+      .catch(() => { /* backend not ready yet — user can log in manually */ })
+  }, [session, loginWithIdentityToken])
   const isStaff = session?.role === 'Admin' || session?.role === 'SocialWorker'
   const isDonor = session?.role === 'Donor'
 

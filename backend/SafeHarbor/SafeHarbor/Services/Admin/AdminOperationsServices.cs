@@ -49,6 +49,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             .Include(x => x.Safehouse)
             .Include(x => x.CaseCategory)
             .Include(x => x.StatusState)
+            .Include(x => x.Resident)
             .AsQueryable();
 
         if (query.SafehouseId is { } safehouseId)
@@ -92,6 +93,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.StatusStateId,
                 x.StatusState != null ? x.StatusState.Name : "Unknown",
                 x.CreatedBy,
+                x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
                 x.ClosedAt))
             .ToArrayAsync(ct);
@@ -161,6 +163,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.StatusStateId,
                 x.StatusState != null ? x.StatusState.Name : "Unknown",
                 x.CreatedBy,
+                x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
                 x.ClosedAt))
             .FirstAsync(ct);
@@ -181,7 +184,11 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim().ToLower();
-            q = q.Where(x => x.Summary.ToLower().Contains(search));
+            q = q.Where(x =>
+                x.Summary.ToLower().Contains(search) ||
+                x.SocialWorker.ToLower().Contains(search) ||
+                x.EmotionalStateObserved.ToLower().Contains(search) ||
+                (x.InterventionsApplied != null && x.InterventionsApplied.ToLower().Contains(search)));
         }
 
         q = query.Desc ? q.OrderByDescending(x => x.RecordedAt) : q.OrderBy(x => x.RecordedAt);
@@ -192,7 +199,22 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
 
         var items = await q.Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new ProcessRecordItem(x.Id, x.ResidentCaseId, x.RecordedAt, x.Summary))
+            .Select(x => new ProcessRecordItem(
+                x.Id,
+                x.ResidentCaseId,
+                x.RecordedAt,
+                x.SocialWorker,
+                x.SessionType,
+                x.SessionDurationMinutes,
+                x.EmotionalStateObserved,
+                x.EmotionalStateEnd,
+                x.Summary,
+                x.InterventionsApplied,
+                x.FollowUpActions,
+                x.ProgressNoted,
+                x.ConcernsFlagged,
+                x.ReferralMade,
+                x.NotesRestricted != null && x.NotesRestricted != string.Empty))
             .ToArrayAsync(ct);
 
         return new PagedResult<ProcessRecordItem>(items, page, pageSize, total);
@@ -204,14 +226,31 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         {
             Id = Guid.NewGuid(),
             ResidentCaseId = request.ResidentCaseId,
+            RecordedAt = request.RecordedAt ?? DateTimeOffset.UtcNow,
+            SocialWorker = request.SocialWorker,
+            SessionType = request.SessionType,
+            SessionDurationMinutes = request.SessionDurationMinutes,
+            EmotionalStateObserved = request.EmotionalStateObserved,
+            EmotionalStateEnd = request.EmotionalStateEnd,
             Summary = request.Summary,
-            RecordedAt = request.RecordedAt ?? DateTimeOffset.UtcNow
+            InterventionsApplied = request.InterventionsApplied,
+            FollowUpActions = request.FollowUpActions,
+            ProgressNoted = request.ProgressNoted,
+            ConcernsFlagged = request.ConcernsFlagged,
+            ReferralMade = request.ReferralMade,
+            NotesRestricted = request.NotesRestricted
         };
 
         db.ProcessRecordings.Add(entity);
         await db.SaveChangesAsync(ct);
 
-        return new ProcessRecordItem(entity.Id, entity.ResidentCaseId, entity.RecordedAt, entity.Summary);
+        return new ProcessRecordItem(
+            entity.Id, entity.ResidentCaseId, entity.RecordedAt,
+            entity.SocialWorker, entity.SessionType, entity.SessionDurationMinutes,
+            entity.EmotionalStateObserved, entity.EmotionalStateEnd, entity.Summary,
+            entity.InterventionsApplied, entity.FollowUpActions,
+            entity.ProgressNoted, entity.ConcernsFlagged, entity.ReferralMade,
+            entity.NotesRestricted != null && entity.NotesRestricted != string.Empty);
     }
 
     public async Task<ProcessRecordItem?> UpdateAsync(Guid id, CreateProcessRecordRequest request, CancellationToken ct)
@@ -220,11 +259,28 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         if (entity is null) return null;
 
         entity.ResidentCaseId = request.ResidentCaseId;
-        entity.Summary = request.Summary;
         entity.RecordedAt = request.RecordedAt ?? entity.RecordedAt;
+        entity.SocialWorker = request.SocialWorker;
+        entity.SessionType = request.SessionType;
+        entity.SessionDurationMinutes = request.SessionDurationMinutes;
+        entity.EmotionalStateObserved = request.EmotionalStateObserved;
+        entity.EmotionalStateEnd = request.EmotionalStateEnd;
+        entity.Summary = request.Summary;
+        entity.InterventionsApplied = request.InterventionsApplied;
+        entity.FollowUpActions = request.FollowUpActions;
+        entity.ProgressNoted = request.ProgressNoted;
+        entity.ConcernsFlagged = request.ConcernsFlagged;
+        entity.ReferralMade = request.ReferralMade;
+        entity.NotesRestricted = request.NotesRestricted;
 
         await db.SaveChangesAsync(ct);
-        return new ProcessRecordItem(entity.Id, entity.ResidentCaseId, entity.RecordedAt, entity.Summary);
+        return new ProcessRecordItem(
+            entity.Id, entity.ResidentCaseId, entity.RecordedAt,
+            entity.SocialWorker, entity.SessionType, entity.SessionDurationMinutes,
+            entity.EmotionalStateObserved, entity.EmotionalStateEnd, entity.Summary,
+            entity.InterventionsApplied, entity.FollowUpActions,
+            entity.ProgressNoted, entity.ConcernsFlagged, entity.ReferralMade,
+            entity.NotesRestricted != null && entity.NotesRestricted != string.Empty);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
