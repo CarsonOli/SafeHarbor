@@ -4,24 +4,24 @@ import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
 import { appNavRoutes } from './config/appAccess'
-import type { AppRole } from './auth/authSession'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
 const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
-const DEV_AUTO_LOGIN_ROLE = import.meta.env.VITE_DEV_AUTO_LOGIN_ROLE as AppRole | undefined
 
 function App() {
-  const { session, logout, loginWithIdentityToken } = useAuth()
+  const { session, logout, loginWithToken } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const autoLoginAttempted = useRef(false)
 
   useEffect(() => {
-    if (autoLoginAttempted.current || session || !DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD || !DEV_AUTO_LOGIN_ROLE) return
+    if (autoLoginAttempted.current || session || !DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD) return
     autoLoginAttempted.current = true
-    void requestLocalDevelopmentToken(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_ROLE, DEV_AUTO_LOGIN_PASSWORD)
-      .then((idToken) => loginWithIdentityToken(idToken))
+    // NOTE: Auto-login uses the same email/password contract as manual local auth.
+    // Role is inferred from the account and JWT claims during sign-in.
+    void requestLocalDevelopmentToken(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_PASSWORD)
+      .then((idToken) => loginWithToken(idToken))
       .catch(() => { /* backend not ready yet — user can log in manually */ })
-  }, [session, loginWithIdentityToken])
+  }, [session, loginWithToken])
   const isDonor = session?.role === 'Donor'
   const role = session?.role
 
