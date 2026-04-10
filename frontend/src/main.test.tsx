@@ -25,7 +25,6 @@ vi.mock('./pages/app/ProcessRecordingPage', () => ({ ProcessRecordingPage: () =>
 vi.mock('./pages/app/HomeVisitationConferencesPage', () => ({ HomeVisitationConferencesPage: () => <div>visitation-conferences-page</div> }))
 vi.mock('./pages/app/ReportsAnalyticsPage', () => ({ ReportsAnalyticsPage: () => <div>reports-analytics-page</div> }))
 vi.mock('./pages/donor/YourDonationsPage', () => ({ YourDonationsPage: () => <div>your-donations-page</div> }))
-vi.mock('./pages/app/AdminDonorAnalyticsPage', () => ({ AdminDonorAnalyticsPage: () => <div>admin-donor-analytics-page</div> }))
 vi.mock('./pages/DonatePage', () => ({ DonatePage: () => <div>donate-page</div> }))
 
 async function renderRoute(path: string) {
@@ -102,6 +101,14 @@ describe('main routing guards', () => {
     expect(blockedStaffView.container.textContent).toContain('home-page')
     expect(blockedStaffView.container.textContent).not.toContain('admin-dashboard-page')
     blockedStaffView.cleanup()
+  })
+
+  it('allows donors to access /donor/donations route alias', async () => {
+    mockSession = { email: 'alice@example.com', role: 'Donor' }
+    const donorView = await renderRoute('/donor/donations')
+
+    expect(donorView.container.textContent).toContain('your-donations-page')
+    donorView.cleanup()
   })
 
   it('enforces nested SocialWorker-only route inside /app/process-recording', async () => {

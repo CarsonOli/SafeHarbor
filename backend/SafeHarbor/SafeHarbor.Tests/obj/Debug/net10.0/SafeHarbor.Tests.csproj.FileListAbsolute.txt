@@ -1,0 +1,9 @@
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\bin\Debug\net10.0\.msCoverageSourceRootsMapping_SafeHarbor.Tests
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\bin\Debug\net10.0\CoverletSourceRootsMapping_SafeHarbor.Tests
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.csproj.AssemblyReference.cache
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\MvcTestingAppManifest.json
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.AssemblyInfoInputs.cache
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.AssemblyInfo.cs
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.csproj.CoreCompileInputs.cache
+C:\Users\carso\source\repos\SafeHarbor\backend\SafeHarbor\SafeHarbor.Tests\obj\Debug\net10.0\SafeHarbor.Tests.sourcelink.json

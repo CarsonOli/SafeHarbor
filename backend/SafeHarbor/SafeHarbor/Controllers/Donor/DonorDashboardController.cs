@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Npgsql;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
 using SafeHarbor.Services;
@@ -42,51 +41,46 @@ public sealed class DonorDashboardController(
         if (request.Amount <= 0)
             return BadRequest(new { error = "Amount must be greater than zero." });
 
-        var (donorId, donorEmail) = ResolveIdentityClaims();
-        if (donorId is null && string.IsNullOrWhiteSpace(donorEmail))
+        var userId = ResolveUserId();
+        if (userId is null)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor identity claim is required." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated user id claim is required." });
         }
 
-        try
+        var (_, donorEmail) = ResolveIdentityClaims();
+        if (string.IsNullOrWhiteSpace(donorEmail))
         {
-            var contribution = await donorDashboardService.AddContributionAsync(donorId, donorEmail, request, ct);
-            if (contribution is null)
-            {
-                return NotFound(new { error = "No donor profile found for the authenticated identity." });
-            }
-
-            return CreatedAtAction(nameof(GetDashboard), null, contribution);
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated donor email claim is required." });
         }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn)
+
+        var supporterDonationId = await donationAccessService.CreateDonationForCurrentUserAsync(
+            userId.Value,
+            donorEmail,
+            request.Amount,
+            "One-time",
+            ct);
+        if (supporterDonationId is null)
         {
-            // NOTE: Some deployments use supporter/donations schema without lighthouse.donors.
-            // Fall back to supporter-linked donation writes so donor UX still works.
-            var userId = ResolveUserId();
-            if (userId is null)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new { error = "Authenticated user id claim is required." });
-            }
-
-            var donationId = await donationAccessService.CreateDonationForCurrentUserAsync(
-                userId.Value,
-                donorEmail,
-                request.Amount,
-                "One-time",
-                ct);
-
-            if (donationId is null)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unable to record donation for this account." });
-            }
-
-            var syntheticId = ToDeterministicGuid(donationId.Value);
-            return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unable to record donation for this account." });
         }
+
+        var syntheticId = ToDeterministicGuid(supporterDonationId.Value);
+        return CreatedAtAction(nameof(GetDashboard), null, new NewContributionResponse(syntheticId, "Thank you! Your donation has been added."));
     }
 
     [HttpGet("donations")]
     public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonations(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    [HttpGet("your-donations")]
+    public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsLegacy(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    [HttpGet("dashboard/donations")]
+    public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsDashboardScoped(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    private async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsCore(CancellationToken ct)
     {
         var userId = ResolveUserId();
         if (userId is null)

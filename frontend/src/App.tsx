@@ -4,7 +4,6 @@ import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
 import { appNavRoutes } from './config/appAccess'
-import { ThemeToggle } from './components/ThemeToggle'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
 const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
@@ -12,6 +11,7 @@ const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as 
 function App() {
   const { session, logout, loginWithToken } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const autoLoginAttempted = useRef(false)
 
   useEffect(() => {
@@ -23,6 +23,36 @@ function App() {
       .then((idToken) => loginWithToken(idToken))
       .catch(() => { /* backend not ready yet — user can log in manually */ })
   }, [session, loginWithToken])
+
+  // Read theme cookie on mount and apply saved preference.
+  useEffect(() => {
+    const match = document.cookie.split('; ').find((c) => c.startsWith('sh-theme='))
+    const saved = match?.split('=')[1]
+    if (saved === 'dark' || saved === 'light') {
+      setTheme(saved)
+      document.documentElement.setAttribute('data-theme', saved)
+    }
+  }, [])
+
+  // GDPR-gated analytics: only track page views when the user has given analytics consent.
+  useEffect(() => {
+    const raw = localStorage.getItem('safeharbor-cookie-consent')
+    if (!raw) return
+    try {
+      const consent = JSON.parse(raw) as { analytics?: boolean }
+      if (consent.analytics) {
+        const prev = Number(sessionStorage.getItem('sh-pageviews') ?? '0')
+        sessionStorage.setItem('sh-pageviews', String(prev + 1))
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  function toggleTheme() {
+    const next = theme === 'light' ? 'dark' : 'light'
+    setTheme(next)
+    document.documentElement.setAttribute('data-theme', next)
+    document.cookie = `sh-theme=${next}; path=/; SameSite=Lax; max-age=31536000`
+  }
   const isDonor = session?.role === 'Donor'
   const role = session?.role
 
@@ -81,8 +111,8 @@ function App() {
               <img 
                 src="/favicon.png"
                 alt="Safe Harbor Logo" 
-                width="38"   /* Explicit width for Lighthouse CLS */
-                height="38"  /* Explicit height for Lighthouse CLS */
+                width={38}
+                height={38}
                 style={{ 
                   height: '38px', 
                   width: 'auto',
@@ -94,18 +124,21 @@ function App() {
               </div>
             </Link>
           </div>
-          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {/* ── THEME TOGGLE ADDED HERE ── */}
-            <ThemeToggle />
+          <div className="header-actions">
+            <button type="button" className="button button-secondary" onClick={toggleTheme}>
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
             {session ? (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})
               </button>
             ) : (
-              /* Using button-secondary ensures it gets that light teal look */
+              <>
+                {/* NOTE: Using button-secondary ensures it gets that light teal look. */}
               <Link to="/login" className="button button-secondary">
                 Login
               </Link>
+              </>
             )}
           </div>
         </div>

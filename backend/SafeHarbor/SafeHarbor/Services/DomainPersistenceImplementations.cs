@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using System.Security.Cryptography;
+using System.Text;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
@@ -10,8 +13,24 @@ namespace SafeHarbor.Services;
 
 public sealed class DbResidentRepository(SafeHarborDbContext db) : IResidentRepository
 {
-    public async Task<IReadOnlyList<Resident>> ListAsync(CancellationToken ct) =>
-        await db.Residents.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
+    public async Task<IReadOnlyList<Resident>> ListAsync(CancellationToken ct)
+    {
+        if (!await HasCanonicalResidentSchemaAsync(ct))
+        {
+            return await LoadLegacyResidentsAsync(ct);
+        }
+
+        try
+        {
+            return await db.Residents.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
+        }
+        catch (PostgresException ex) when (IsMissingSchema(ex))
+        {
+            // NOTE: Legacy production datasets still use residents.resident_id + assigned_social_worker.
+            // We adapt those rows into the canonical Resident model so ML insights can still run.
+            return await LoadLegacyResidentsAsync(ct);
+        }
+    }
 
     public Task<Resident?> FindAsync(Guid id, CancellationToken ct) =>
         db.Residents.FirstOrDefaultAsync(x => x.Id == id, ct)!;
@@ -47,36 +66,134 @@ public sealed class DbResidentRepository(SafeHarborDbContext db) : IResidentRepo
         await db.SaveChangesAsync(ct);
         return true;
     }
+
+    private async Task<IReadOnlyList<Resident>> LoadLegacyResidentsAsync(CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return [];
+        }
+
+        const string sql = """
+            SELECT
+                resident_id,
+                COALESCE(NULLIF(TRIM(case_control_no), ''), NULLIF(TRIM(internal_code), ''), CONCAT('Resident #', resident_id::text)) AS display_name,
+                date_of_birth,
+                COALESCE(NULLIF(TRIM(assigned_social_worker), ''), 'unknown@safeharbor.local') AS case_worker,
+                COALESCE(notes_restricted, '') AS notes,
+                COALESCE(created_at, CURRENT_TIMESTAMP) AS created_at_utc
+            FROM lighthouse.residents
+            ORDER BY COALESCE(created_at, CURRENT_TIMESTAMP), resident_id
+            """;
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var residents = new List<Resident>();
+        while (await reader.ReadAsync(ct))
+        {
+            var residentId = reader.GetInt32(0);
+            var createdAt = reader.IsDBNull(5)
+                ? DateTimeOffset.UtcNow
+                : new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc));
+
+            var dateOfBirth = reader.IsDBNull(2)
+                ? DateOnly.FromDateTime(DateTime.UtcNow.Date)
+                : DateOnly.FromDateTime(reader.GetDateTime(2));
+
+            residents.Add(new Resident
+            {
+                Id = BuildDeterministicGuid("resident", residentId.ToString()),
+                FullName = reader.GetString(1),
+                DateOfBirth = dateOfBirth,
+                CaseWorkerEmail = reader.GetString(3),
+                MedicalNotes = reader.GetString(4),
+                CreatedAtUtc = createdAt,
+                UpdatedAtUtc = createdAt
+            });
+        }
+
+        return residents;
+    }
+
+    private static Guid BuildDeterministicGuid(string namespaceKey, string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{namespaceKey}:{value}"));
+        Span<byte> guidBytes = stackalloc byte[16];
+        bytes.AsSpan(0, 16).CopyTo(guidBytes);
+        return new Guid(guidBytes);
+    }
+
+    private static bool IsMissingSchema(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
+
+    private async Task<bool> HasCanonicalResidentSchemaAsync(CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return false;
+        }
+
+        var requiredColumns = new[]
+        {
+            "id",
+            "full_name",
+            "date_of_birth",
+            "medical_notes",
+            "case_worker_email",
+            "created_at_utc",
+            "updated_at_utc"
+        };
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT COUNT(*)::int
+            FROM information_schema.columns
+            WHERE table_schema = 'lighthouse'
+              AND table_name = 'residents'
+              AND column_name = ANY(@columns)
+            """,
+            conn);
+        cmd.Parameters.AddWithValue("columns", requiredColumns);
+        var count = await cmd.ExecuteScalarAsync(ct);
+        return count is int intCount && intCount == requiredColumns.Length;
+    }
 }
 
 public sealed class DbDonorRepository(SafeHarborDbContext db) : IDonorRepository
 {
-    public async Task<IReadOnlyList<Donor>> ListAsync(CancellationToken ct) =>
-        await db.Donors.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
+    public async Task<IReadOnlyList<Supporter>> ListAsync(CancellationToken ct) =>
+        await db.Supporters.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
 
-    public Task<Donor?> FindAsync(Guid id, CancellationToken ct) =>
-        db.Donors.FirstOrDefaultAsync(x => x.Id == id, ct)!;
+    public Task<Supporter?> FindAsync(Guid id, CancellationToken ct) =>
+        db.Supporters.FirstOrDefaultAsync(x => x.Id == id, ct)!;
 
-    public Task<Donor?> FindByEmailAsync(string email, CancellationToken ct) =>
-        db.Donors.FirstOrDefaultAsync(x => x.Email.ToLower() == email.ToLower(), ct)!;
+    public Task<Supporter?> FindByEmailAsync(string email, CancellationToken ct) =>
+        db.Supporters.FirstOrDefaultAsync(x => x.Email.ToLower() == email.ToLower(), ct)!;
 
-    public async Task<Donor> CreateAsync(Donor donor, CancellationToken ct)
+    public async Task<Supporter> CreateAsync(Supporter Supporter, CancellationToken ct)
     {
-        db.Donors.Add(donor);
+        db.Supporters.Add(Supporter);
         await db.SaveChangesAsync(ct);
-        return donor;
+        return Supporter;
     }
 
-    public async Task<Donor?> UpdateAsync(Donor donor, CancellationToken ct)
+    public async Task<Supporter?> UpdateAsync(Supporter Supporter, CancellationToken ct)
     {
-        var existing = await db.Donors.FirstOrDefaultAsync(x => x.Id == donor.Id, ct);
+        var existing = await db.Supporters.FirstOrDefaultAsync(x => x.Id == Supporter.Id, ct);
         if (existing is null) return null;
 
-        existing.DisplayName = donor.DisplayName;
-        existing.Email = donor.Email;
-        existing.LifetimeDonations = donor.LifetimeDonations;
-        existing.PaymentToken = donor.PaymentToken;
-        existing.UpdatedAtUtc = donor.UpdatedAtUtc;
+        existing.DisplayName = Supporter.DisplayName;
+        existing.Email = Supporter.Email;
+        existing.LifetimeDonations = Supporter.LifetimeDonations;
+        existing.PaymentToken = Supporter.PaymentToken;
+        existing.UpdatedAtUtc = Supporter.UpdatedAtUtc;
 
         await db.SaveChangesAsync(ct);
         return existing;
@@ -84,10 +201,10 @@ public sealed class DbDonorRepository(SafeHarborDbContext db) : IDonorRepository
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
     {
-        var existing = await db.Donors.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var existing = await db.Supporters.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (existing is null) return false;
 
-        db.Donors.Remove(existing);
+        db.Supporters.Remove(existing);
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -114,9 +231,9 @@ public sealed class DbContributionRepository(SafeHarborDbContext db) : IContribu
             .OrderBy(c => c.ContributionDate)
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid donorId, CancellationToken ct) =>
+    public async Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid SupporterId, CancellationToken ct) =>
         await db.Contributions.AsNoTracking()
-            .Where(c => c.DonorId == donorId && c.StatusStateId == CompletedContributionStatusId)
+            .Where(c => c.SupporterId == SupporterId && c.StatusStateId == CompletedContributionStatusId)
             .OrderBy(c => c.ContributionDate)
             .ToListAsync(ct);
 
@@ -157,26 +274,26 @@ public sealed class InMemoryResidentRepository(InMemoryDataStore store) : IResid
 
 public sealed class InMemoryDonorRepository(InMemoryDataStore store) : IDonorRepository
 {
-    public Task<IReadOnlyList<Donor>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Donor>>(store.Donors.ToList());
-    public Task<Donor?> FindAsync(Guid id, CancellationToken ct) => Task.FromResult(store.Donors.FirstOrDefault(x => x.Id == id));
-    public Task<Donor?> FindByEmailAsync(string email, CancellationToken ct) => Task.FromResult(store.Donors.FirstOrDefault(x => string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)));
-    public Task<Donor> CreateAsync(Donor donor, CancellationToken ct) { store.Donors.Add(donor); return Task.FromResult(donor); }
-    public Task<Donor?> UpdateAsync(Donor donor, CancellationToken ct)
+    public Task<IReadOnlyList<Supporter>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Supporter>>(store.Supporters.ToList());
+    public Task<Supporter?> FindAsync(Guid id, CancellationToken ct) => Task.FromResult(store.Supporters.FirstOrDefault(x => x.Id == id));
+    public Task<Supporter?> FindByEmailAsync(string email, CancellationToken ct) => Task.FromResult(store.Supporters.FirstOrDefault(x => string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)));
+    public Task<Supporter> CreateAsync(Supporter Supporter, CancellationToken ct) { store.Supporters.Add(Supporter); return Task.FromResult(Supporter); }
+    public Task<Supporter?> UpdateAsync(Supporter Supporter, CancellationToken ct)
     {
-        var existing = store.Donors.FirstOrDefault(x => x.Id == donor.Id);
-        if (existing is null) return Task.FromResult<Donor?>(null);
-        existing.DisplayName = donor.DisplayName;
-        existing.Email = donor.Email;
-        existing.LifetimeDonations = donor.LifetimeDonations;
-        existing.PaymentToken = donor.PaymentToken;
-        existing.UpdatedAtUtc = donor.UpdatedAtUtc;
-        return Task.FromResult<Donor?>(existing);
+        var existing = store.Supporters.FirstOrDefault(x => x.Id == Supporter.Id);
+        if (existing is null) return Task.FromResult<Supporter?>(null);
+        existing.DisplayName = Supporter.DisplayName;
+        existing.Email = Supporter.Email;
+        existing.LifetimeDonations = Supporter.LifetimeDonations;
+        existing.PaymentToken = Supporter.PaymentToken;
+        existing.UpdatedAtUtc = Supporter.UpdatedAtUtc;
+        return Task.FromResult<Supporter?>(existing);
     }
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct)
     {
-        var existing = store.Donors.FirstOrDefault(x => x.Id == id);
+        var existing = store.Supporters.FirstOrDefault(x => x.Id == id);
         if (existing is null) return Task.FromResult(false);
-        store.Donors.Remove(existing);
+        store.Supporters.Remove(existing);
         return Task.FromResult(true);
     }
 }
@@ -192,7 +309,7 @@ public sealed class InMemoryContributionRepository(InMemoryDataStore store) : IC
 {
     private const int CompletedContributionStatusId = 1;
     public Task<IReadOnlyList<Contribution>> ListCompletedAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Contribution>>(store.Contributions.Where(c => c.StatusStateId == CompletedContributionStatusId).OrderBy(c => c.ContributionDate).ToList());
-    public Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid donorId, CancellationToken ct) => Task.FromResult<IReadOnlyList<Contribution>>(store.Contributions.Where(c => c.DonorId == donorId && c.StatusStateId == CompletedContributionStatusId).OrderBy(c => c.ContributionDate).ToList());
+    public Task<IReadOnlyList<Contribution>> ListCompletedByDonorAsync(Guid SupporterId, CancellationToken ct) => Task.FromResult<IReadOnlyList<Contribution>>(store.Contributions.Where(c => c.SupporterId == SupporterId && c.StatusStateId == CompletedContributionStatusId).OrderBy(c => c.ContributionDate).ToList());
     public Task<Contribution> AddAsync(Contribution contribution, CancellationToken ct) { store.Contributions.Add(contribution); return Task.FromResult(contribution); }
 }
 
@@ -265,17 +382,17 @@ public sealed class ResidentAdminService(
 }
 
 public sealed class DonorAdminService(
-    IDonorRepository donors,
+    IDonorRepository Supporters,
     IContributionRepository contributions,
     IAuditLogger auditLogger,
     IDataRetentionRedactionService retentionRedactionService) : IDonorAdminService
 {
     public async Task<IReadOnlyCollection<DonorAdminResponse>> GetAllAsync(CancellationToken ct)
     {
-        var allDonors  = await donors.ListAsync(ct);
+        var allDonors  = await Supporters.ListAsync(ct);
         var allContribs = await contributions.ListCompletedAsync(ct);
         var byDonor    = allContribs
-            .GroupBy(c => c.DonorId)
+            .GroupBy(c => c.SupporterId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         return allDonors.Select(d =>
@@ -293,13 +410,13 @@ public sealed class DonorAdminService(
 
     public async Task<DonorAdminResponse?> GetByIdAsync(Guid id, CancellationToken ct)
     {
-        var donor = await donors.FindAsync(id, ct);
-        return donor is null ? null : MapAdmin(donor);
+        var Supporter = await Supporters.FindAsync(id, ct);
+        return Supporter is null ? null : MapAdmin(Supporter);
     }
 
     public async Task<DonorAdminResponse> CreateAsync(DonorCreateRequest request, string actor, CancellationToken ct)
     {
-        var donor = new Donor
+        var Supporter = new Supporter
         {
             DisplayName = request.DisplayName,
             Email = request.Email,
@@ -309,14 +426,14 @@ public sealed class DonorAdminService(
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
-        donor = await donors.CreateAsync(donor, ct);
-        auditLogger.RecordMutation("donor", "create", donor.Id, actor);
-        return MapAdmin(donor);
+        Supporter = await Supporters.CreateAsync(Supporter, ct);
+        auditLogger.RecordMutation("Supporter", "create", Supporter.Id, actor);
+        return MapAdmin(Supporter);
     }
 
     public async Task<DonorAdminResponse?> UpdateAsync(Guid id, DonorUpdateRequest request, string actor, CancellationToken ct)
     {
-        var updated = await donors.UpdateAsync(new Donor
+        var updated = await Supporters.UpdateAsync(new Supporter
         {
             Id = id,
             DisplayName = request.DisplayName,
@@ -327,31 +444,31 @@ public sealed class DonorAdminService(
         }, ct);
 
         if (updated is null) return null;
-        auditLogger.RecordMutation("donor", "update", updated.Id, actor);
+        auditLogger.RecordMutation("Supporter", "update", updated.Id, actor);
         return MapAdmin(updated);
     }
 
     public async Task<bool> DeleteAsync(Guid id, string actor, CancellationToken ct)
     {
-        var deleted = await donors.DeleteAsync(id, ct);
-        if (deleted) auditLogger.RecordMutation("donor", "delete", id, actor);
+        var deleted = await Supporters.DeleteAsync(id, ct);
+        if (deleted) auditLogger.RecordMutation("Supporter", "delete", id, actor);
         return deleted;
     }
 
     public async Task<IReadOnlyCollection<DonorPublicResponse>> ReportSummaryAsync(CancellationToken ct)
     {
-        var payload = (await donors.ListAsync(ct))
+        var payload = (await Supporters.ListAsync(ct))
             .Select(x => new DonorPublicResponse(x.Id, x.DisplayName, x.LifetimeDonations))
             .ToArray();
 
         return retentionRedactionService.ApplyRetentionPolicy(payload, "donor_summary_report");
     }
 
-    private static DonorAdminResponse MapAdmin(Donor donor) =>
-        new(donor.Id, donor.DisplayName, donor.Email, donor.LifetimeDonations, donor.PaymentToken ?? string.Empty, donor.CreatedAtUtc, donor.UpdatedAtUtc);
+    private static DonorAdminResponse MapAdmin(Supporter Supporter) =>
+        new(Supporter.Id, Supporter.DisplayName, Supporter.Email, Supporter.LifetimeDonations, Supporter.PaymentToken ?? string.Empty, Supporter.CreatedAtUtc, Supporter.UpdatedAtUtc);
 }
 
-public sealed class PublicRecordsService(IResidentRepository residents, IDonorRepository donors) : IPublicRecordsService
+public sealed class PublicRecordsService(IResidentRepository residents, IDonorRepository Supporters) : IPublicRecordsService
 {
     public async Task<IReadOnlyCollection<ResidentPublicResponse>> GetResidentsAsync(CancellationToken ct) =>
         (await residents.ListAsync(ct))
@@ -359,7 +476,7 @@ public sealed class PublicRecordsService(IResidentRepository residents, IDonorRe
             .ToArray();
 
     public async Task<IReadOnlyCollection<DonorPublicResponse>> GetDonorsAsync(CancellationToken ct) =>
-        (await donors.ListAsync(ct)).Select(d => new DonorPublicResponse(d.Id, d.DisplayName, d.LifetimeDonations)).ToArray();
+        (await Supporters.ListAsync(ct)).Select(d => new DonorPublicResponse(d.Id, d.DisplayName, d.LifetimeDonations)).ToArray();
 
     private static int CalculateAgeYears(DateOnly dateOfBirth)
     {
@@ -380,32 +497,32 @@ public sealed class DonorDashboardService(
     private const int CompletedContributionStatusId = 1;
     private const int OnlineDonationTypeId = 1;
 
-    public async Task<DonorDashboardResponse?> GetDashboardAsync(Guid? donorId, string? email, CancellationToken ct)
+    public async Task<DonorDashboardResponse?> GetDashboardAsync(Guid? SupporterId, string? email, CancellationToken ct)
     {
-        var donor = await ResolveDonorAsync(donorId, email, ct);
-        if (donor is null) return null;
+        var Supporter = await ResolveDonorAsync(SupporterId, email, ct);
+        if (Supporter is null) return null;
 
-        var donorContributions = await contributionRepository.ListCompletedByDonorAsync(donor.Id, ct);
+        var donorContributions = await contributionRepository.ListCompletedByDonorAsync(Supporter.Id, ct);
         var lifetimeDonated = donorContributions.Sum(c => c.Amount);
         var monthlyHistory = BuildMonthlyHistory(donorContributions);
-        var campaignSummary = await BuildCampaignGoalSummaryAsync(donor.Id, ct);
+        var campaignSummary = await BuildCampaignGoalSummaryAsync(Supporter.Id, ct);
 
         var impact = impactCalculator.Calculate(lifetimeDonated);
         var impactSummary = new DonorImpactSummary(impact.GirlsHelped, impact.ImpactLabel, impact.ModelVersion);
 
-        return new DonorDashboardResponse(donor.DisplayName, lifetimeDonated, monthlyHistory, campaignSummary, impactSummary);
+        return new DonorDashboardResponse(Supporter.DisplayName, lifetimeDonated, monthlyHistory, campaignSummary, impactSummary);
     }
 
-    public async Task<NewContributionResponse?> AddContributionAsync(Guid? donorId, string? email, NewContributionRequest request, CancellationToken ct)
+    public async Task<NewContributionResponse?> AddContributionAsync(Guid? SupporterId, string? email, NewContributionRequest request, CancellationToken ct)
     {
-        var donor = await ResolveDonorAsync(donorId, email, ct);
-        if (donor is null) return null;
+        var Supporter = await ResolveDonorAsync(SupporterId, email, ct);
+        if (Supporter is null) return null;
 
         var activeCampaign = await campaignRepository.GetActiveAsync(ct);
         var contribution = new Contribution
         {
             Id = Guid.NewGuid(),
-            DonorId = donor.Id,
+            SupporterId = Supporter.Id,
             CampaignId = request.CampaignId ?? activeCampaign?.Id,
             Amount = request.Amount,
             ContributionDate = DateTimeOffset.UtcNow,
@@ -415,16 +532,16 @@ public sealed class DonorDashboardService(
 
         await contributionRepository.AddAsync(contribution, ct);
 
-        donor.LifetimeDonations += request.Amount;
-        donor.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await donorRepository.UpdateAsync(donor, ct);
+        Supporter.LifetimeDonations += request.Amount;
+        Supporter.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await donorRepository.UpdateAsync(Supporter, ct);
 
         return new NewContributionResponse(contribution.Id, "Thank you! Your donation has been added.");
     }
 
-    private async Task<Donor?> ResolveDonorAsync(Guid? donorId, string? email, CancellationToken ct)
+    private async Task<Supporter?> ResolveDonorAsync(Guid? SupporterId, string? email, CancellationToken ct)
     {
-        if (donorId is { } id)
+        if (SupporterId is { } id)
         {
             var donorById = await donorRepository.FindAsync(id, ct);
             if (donorById is not null) return donorById;
@@ -432,7 +549,7 @@ public sealed class DonorDashboardService(
             // NOTE: Log includes stable identifiers so operations can quickly backfill missing
             // domain profiles through the auth-maintenance reconciliation endpoint.
             logger.LogWarning(
-                "Donor dashboard identity mismatch: no donor profile for claim oid {DonorId}. Email claim: {Email}.",
+                "Supporter dashboard identity mismatch: no Supporter profile for claim oid {SupporterId}. Email claim: {Email}.",
                 id,
                 email ?? "<null>");
         }
@@ -446,7 +563,7 @@ public sealed class DonorDashboardService(
             }
 
             logger.LogWarning(
-                "Donor dashboard identity mismatch: no donor profile for email {Email}. Suggested action: run /api/admin/auth-maintenance/reconcile-domain-profiles.",
+                "Supporter dashboard identity mismatch: no Supporter profile for email {Email}. Suggested action: run /api/admin/auth-maintenance/reconcile-domain-profiles.",
                 email);
         }
 
@@ -472,7 +589,7 @@ public sealed class DonorDashboardService(
         return result;
     }
 
-    private async Task<CampaignGoalSummary?> BuildCampaignGoalSummaryAsync(Guid donorId, CancellationToken ct)
+    private async Task<CampaignGoalSummary?> BuildCampaignGoalSummaryAsync(Guid SupporterId, CancellationToken ct)
     {
         var activeCampaign = await campaignRepository.GetActiveAsync(ct);
         if (activeCampaign is null) return null;
@@ -481,7 +598,7 @@ public sealed class DonorDashboardService(
         var campaignCompleted = completedContributions.Where(c => c.CampaignId == activeCampaign.Id).ToList();
 
         var totalRaisedAllDonors = campaignCompleted.Sum(c => c.Amount);
-        var thisDonorContributed = campaignCompleted.Where(c => c.DonorId == donorId).Sum(c => c.Amount);
+        var thisDonorContributed = campaignCompleted.Where(c => c.SupporterId == SupporterId).Sum(c => c.Amount);
 
         var progressPercent = activeCampaign.GoalAmount > 0
             ? Math.Min(100m, totalRaisedAllDonors / activeCampaign.GoalAmount * 100m)
@@ -502,17 +619,17 @@ public sealed class DonorAnalyticsService(
     public async Task<DonorAnalyticsResponse> GetAnalyticsAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var donors = await donorRepository.ListAsync(ct);
+        var Supporters = await donorRepository.ListAsync(ct);
         var completedContributions = await contributionRepository.ListCompletedAsync(ct);
 
         var totalDonationsReceived = completedContributions.Sum(c => c.Amount);
         var totalContributionCount = completedContributions.Count;
-        var totalDonorCount = donors.Count;
+        var totalDonorCount = Supporters.Count;
 
         var activeCutoff = now.AddDays(-ActiveWindowDays);
         var activeDonorCount = completedContributions
             .Where(c => c.ContributionDate >= activeCutoff)
-            .Select(c => c.DonorId)
+            .Select(c => c.SupporterId)
             .Distinct()
             .Count();
 
@@ -520,7 +637,7 @@ public sealed class DonorAnalyticsService(
         if (totalDonorCount > 0)
         {
             var repeatDonorCount = completedContributions
-                .GroupBy(c => c.DonorId)
+                .GroupBy(c => c.SupporterId)
                 .Count(g => g.Count() >= 2);
             retentionRate = Math.Round((decimal)repeatDonorCount / totalDonorCount * 100, 1);
         }
@@ -531,7 +648,7 @@ public sealed class DonorAnalyticsService(
 
         var monthlyTrend = BuildMonthlyTrend(completedContributions, now);
         var campaigns = await BuildCampaignSummariesAsync(completedContributions, ct);
-        var topDonors = BuildTopDonors(completedContributions, donors);
+        var topDonors = BuildTopDonors(completedContributions, Supporters);
 
         return new DonorAnalyticsResponse(
             totalDonationsReceived,
@@ -552,7 +669,7 @@ public sealed class DonorAnalyticsService(
             .ToDictionary(g => g.Key, g => g.Sum(c => c.Amount));
 
         var firstMonthPerDonor = contributions
-            .GroupBy(c => c.DonorId)
+            .GroupBy(c => c.SupporterId)
             .ToDictionary(g => g.Key, g => g.Min(c => c.ContributionDate).ToString("yyyy-MM"));
 
         var newDonorsByMonth = firstMonthPerDonor.Values
@@ -582,7 +699,7 @@ public sealed class DonorAnalyticsService(
             {
                 var campaignContributions = contributions.Where(c => c.CampaignId == campaign.Id).ToList();
                 var totalRaised = campaignContributions.Sum(c => c.Amount);
-                var donorCount = campaignContributions.Select(c => c.DonorId).Distinct().Count();
+                var donorCount = campaignContributions.Select(c => c.SupporterId).Distinct().Count();
                 var progressPercent = campaign.GoalAmount > 0
                     ? Math.Min(100m, Math.Round(totalRaised / campaign.GoalAmount * 100, 1))
                     : 0m;
@@ -593,16 +710,16 @@ public sealed class DonorAnalyticsService(
             .ToList();
     }
 
-    private static IReadOnlyList<TopDonorSummary> BuildTopDonors(IReadOnlyList<Contribution> contributions, IReadOnlyList<Donor> donors)
+    private static IReadOnlyList<TopDonorSummary> BuildTopDonors(IReadOnlyList<Contribution> contributions, IReadOnlyList<Supporter> Supporters)
     {
         return contributions
-            .GroupBy(c => c.DonorId)
+            .GroupBy(c => c.SupporterId)
             .Select(g =>
             {
-                var donor = donors.FirstOrDefault(d => d.Id == g.Key);
+                var Supporter = Supporters.FirstOrDefault(d => d.Id == g.Key);
                 return new
                 {
-                    DisplayName = donor?.DisplayName ?? "Unknown Donor",
+                    DisplayName = Supporter?.DisplayName ?? "Unknown Supporter",
                     LifetimeDonated = g.Sum(c => c.Amount),
                     ContributionCount = g.Count(),
                 };
@@ -613,3 +730,5 @@ public sealed class DonorAnalyticsService(
             .ToList();
     }
 }
+
+

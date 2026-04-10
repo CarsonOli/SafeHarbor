@@ -136,13 +136,12 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
 // ─── Resident Management (CRUD: Create & Update) ────────────────────────────
 
 export async function createResident(payload: any): Promise<void> {
-  const endpoint = '/api/admin/caseload/residents' // Matching your fetchResidentCases route
+  const endpoint = '/api/admin/caseload/residents'
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
     body: JSON.stringify(payload),
   })
-
   await readJson<unknown>(response, endpoint, 'POST')
 }
 
@@ -153,11 +152,10 @@ export async function updateResident(id: string, payload: any): Promise<void> {
     headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
     body: JSON.stringify(payload),
   })
-
   await readJson<unknown>(response, endpoint, 'PUT')
 }
 
-export async function deleteResident(id: string): Promise<void> {
+export async function deleteResidentCase(id: string): Promise<void> {
   const endpoint = `/api/admin/caseload/residents/${id}`
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'DELETE',
@@ -168,6 +166,45 @@ export async function deleteResident(id: string): Promise<void> {
     await readJson<unknown>(response, endpoint, 'DELETE')
   }
 }
+
+// ─── Home Visits & Case Conferences ─────────────────────────────────────────
+
+export async function createHomeVisit(payload: {
+  residentCaseId: string
+  visitTypeId: number
+  statusStateId: number
+  visitDate: string
+  homeEnvironmentObservations?: string
+  familyCooperationLevel?: string
+  safetyConcernsIdentified?: boolean
+  followUpActions?: string
+  notes: string
+}): Promise<HomeVisitItem> {
+  const endpoint = '/api/admin/visitation-conferences/visits'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  return readJson<HomeVisitItem>(response, endpoint, 'POST')
+}
+
+export async function createCaseConference(payload: {
+  residentCaseId: string
+  statusStateId: number
+  conferenceDate: string
+  outcomeSummary: string
+}): Promise<CaseConferenceItem> {
+  const endpoint = '/api/admin/visitation-conferences/conferences'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(payload),
+  })
+  return readJson<CaseConferenceItem>(response, endpoint, 'POST')
+}
+
+// ─── Donor Profiles (CRUD) ──────────────────────────────────────────────────
 
 export async function createDonorProfile(payload: {
   name: string;
@@ -200,5 +237,7 @@ export async function deleteDonorProfile(id: string): Promise<void> {
     method: 'DELETE',
     headers: buildAuthHeaders({ Accept: 'application/json' }),
   })
-  if (response.status !== 204) await readJson<unknown>(response, endpoint, 'DELETE')
+  if (response.status !== 204 && response.status !== 200) {
+    await readJson<unknown>(response, endpoint, 'DELETE')
+  }
 }

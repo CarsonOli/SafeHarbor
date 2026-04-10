@@ -28,4 +28,18 @@ public sealed class HomeVisitationConferencesController(IVisitationConferenceSer
     {
         return Ok(await visitationConferenceService.GetPreviousAsync(query, ct));
     }
+
+    [HttpPost("visits")]
+    public async Task<ActionResult<HomeVisitItem>> LogVisit([FromBody] CreateHomeVisitRequest request, CancellationToken ct)
+    {
+        var item = await visitationConferenceService.CreateVisitAsync(request, ct);
+        return CreatedAtAction(nameof(GetVisitLogs), item);
+    }
+
+    [HttpPost("conferences")]
+    public async Task<ActionResult<CaseConferenceItem>> LogConference([FromBody] CreateCaseConferenceRequest request, CancellationToken ct)
+    {
+        var item = await visitationConferenceService.CreateConferenceAsync(request, ct);
+        return CreatedAtAction(nameof(GetUpcoming), item);
+    }
 }

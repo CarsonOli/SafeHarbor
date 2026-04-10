@@ -17,15 +17,18 @@ public interface IDonationAccessService
     Task<long?> EnsureSupporterForEmailAsync(string email, string? firstName, string? lastName, CancellationToken ct);
 }
 
-public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDonationAccessService
+public sealed class DonationAccessService(
+    SafeHarborDbContext dbContext,
+    ILogger<DonationAccessService> logger) : IDonationAccessService
 {
     public async Task<PagedResult<DonationListItem>> GetAllDonationsAsync(DonationFiltersQuery filters, CancellationToken ct)
     {
         var normalized = NormalizeFilters(filters);
-        var sql = BuildDonationQuery(normalized, scopedSupporterId: null);
-        var totalSql = BuildDonationCountQuery(normalized, scopedSupporterId: null);
 
         await using var conn = await OpenConnectionAsync(ct);
+        var queryShape = await GetDonationQueryShapeAsync(conn, ct);
+        var sql = BuildDonationQuery(normalized, scopedSupporterId: null, queryShape);
+        var totalSql = BuildDonationCountQuery(normalized, scopedSupporterId: null, queryShape);
         var totalCount = await ExecuteScalarAsync<int>(conn, totalSql.Sql, totalSql.Parameters, ct);
         var donations = await ReadDonationsAsync(conn, sql.Sql, sql.Parameters, ct);
 
@@ -34,8 +37,9 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
     public async Task<DonationListItem?> GetDonationByIdAsync(long donationId, CancellationToken ct)
     {
-        var query = BuildDonationByIdQuery(donationId);
         await using var conn = await OpenConnectionAsync(ct);
+        var queryShape = await GetDonationQueryShapeAsync(conn, ct);
+        var query = BuildDonationByIdQuery(donationId, queryShape);
         var items = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
         return items.FirstOrDefault();
     }
@@ -51,10 +55,9 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
             return new YourDonationsResponse(false, null, null, []);
         }
 
-        var scopedFilters = new DonationFiltersQuery(null, null, null, null, null, null, null, 1, 100);
-        var query = BuildDonationQuery(NormalizeFilters(scopedFilters), user.SupporterId.Value);
         await using var conn = await OpenConnectionAsync(ct);
-        var donations = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
+        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value);
+        var donations = await ReadCurrentUserDonationsAsync(conn, query.Sql, query.Parameters, ct);
 
         var supporterDisplayName = donations.FirstOrDefault()?.DonorDisplayName;
         return new YourDonationsResponse(true, user.SupporterId, supporterDisplayName, donations);
@@ -91,56 +94,34 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         }
 
         await using var conn = await OpenConnectionAsync(ct);
-        const string insertSql = """
-            WITH resolved_id AS (
-                SELECT CASE
-                    WHEN pg_get_serial_sequence('lighthouse.donations', 'donation_id') IS NOT NULL
-                        THEN nextval(pg_get_serial_sequence('lighthouse.donations', 'donation_id'))
-                    ELSE (
-                        SELECT COALESCE(MAX(donation_id), 0) + 1
-                        FROM lighthouse.donations
-                    )
-                END AS donation_id
-            )
-            INSERT INTO lighthouse.donations
-                (donation_id, supporter_id, donation_date, donation_type, amount, frequency, channel_source)
-            SELECT
-                resolved_id.donation_id,
-                @supporter_id,
-                @donation_date,
-                @donation_type,
-                @amount,
-                @frequency,
-                @channel_source
-            FROM resolved_id
-            RETURNING donation_id
-            """;
-
         try
         {
+            var insertPlan = await BuildDynamicInsertPlanAsync(
+                conn,
+                table: "donations",
+                idColumn: "donation_id",
+                knownValuesFactory: (column) => ResolveDonationColumnValue(
+                    column,
+                    supporterId.Value,
+                    amount,
+                    frequency),
+                ct);
+
             var donationId = await ExecuteScalarAsync<object?>(
                 conn,
-                insertSql,
-                new Dictionary<string, object>
-                {
-                    ["supporter_id"] = supporterId.Value,
-                    ["donation_date"] = DateTime.UtcNow,
-                    ["donation_type"] = "Cash",
-                    ["amount"] = amount,
-                    ["frequency"] = string.IsNullOrWhiteSpace(frequency) ? "One-time" : frequency.Trim(),
-                    ["channel_source"] = "Web",
-                },
+                insertPlan.Sql,
+                insertPlan.Parameters,
                 ct);
 
             return donationId is null || donationId is DBNull ? null : Convert.ToInt64(donationId);
         }
-        catch (PostgresException ex) when (
-            ex.SqlState == PostgresErrorCodes.UndefinedTable ||
-            ex.SqlState == PostgresErrorCodes.UndefinedColumn ||
-            ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        catch (PostgresException ex)
         {
-            // NOTE: Keep donation submission non-fatal in environments with divergent
-            // donation schemas; caller can decide whether to fall back to legacy flow.
+            logger.LogError(
+                ex,
+                "Unable to create supporter-linked donation for user {UserId}. SQL state: {SqlState}",
+                userId,
+                ex.SqlState);
             return null;
         }
     }
@@ -211,48 +192,27 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
         // NOTE: We always create a CRM supporter profile before linking auth users so donation
         // ownership stays tied to supporters, not directly to auth account rows.
-        // Some environments define supporters.supporter_id without a default sequence, so we
-        // defensively generate an ID when needed.
         var fallbackName = BuildSupporterDisplayName(normalizedEmail, firstName, lastName);
         await using var conn = await OpenConnectionAsync(ct);
-        const string insertSql = """
-            WITH resolved_id AS (
-                SELECT CASE
-                    WHEN pg_get_serial_sequence('lighthouse.supporters', 'supporter_id') IS NOT NULL
-                        THEN nextval(pg_get_serial_sequence('lighthouse.supporters', 'supporter_id'))
-                    ELSE (
-                        SELECT COALESCE(MAX(supporter_id), 0) + 1
-                        FROM lighthouse.supporters
-                    )
-                END AS supporter_id
-            )
-            INSERT INTO lighthouse.supporters (supporter_id, display_name, first_name, last_name, email, supporter_type, relationship_type)
-            SELECT
-                resolved_id.supporter_id,
-                @display_name,
-                @first_name,
-                @last_name,
-                @email,
-                @supporter_type,
-                @relationship_type
-            FROM resolved_id
-            RETURNING supporter_id
-            """;
 
         try
         {
+            var insertPlan = await BuildDynamicInsertPlanAsync(
+                conn,
+                table: "supporters",
+                idColumn: "supporter_id",
+                knownValuesFactory: (column) => ResolveSupporterColumnValue(
+                    column,
+                    normalizedEmail,
+                    fallbackName,
+                    firstName,
+                    lastName),
+                ct);
+
             var created = await ExecuteScalarAsync<object?>(
                 conn,
-                insertSql,
-                new Dictionary<string, object>
-                {
-                    ["display_name"] = fallbackName,
-                    ["first_name"] = string.IsNullOrWhiteSpace(firstName) ? DBNull.Value : firstName.Trim(),
-                    ["last_name"] = string.IsNullOrWhiteSpace(lastName) ? DBNull.Value : lastName.Trim(),
-                    ["email"] = normalizedEmail,
-                    ["supporter_type"] = "Individual",
-                    ["relationship_type"] = "Donor",
-                },
+                insertPlan.Sql,
+                insertPlan.Parameters,
                 ct);
 
             return created is null || created is DBNull ? null : Convert.ToInt64(created);
@@ -263,14 +223,201 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
             // reading the supporter row that just won the unique constraint.
             return await FindSupporterByEmailAsync(normalizedEmail, ct);
         }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        catch (PostgresException ex)
         {
-            // NOTE: Some production supporter schemas require additional non-null columns
-            // outside the baseline contract. Registration must still succeed for auth users
-            // even when supporter auto-provisioning cannot satisfy every tenant-specific field.
+            logger.LogError(
+                ex,
+                "Unable to auto-create supporter profile for {Email}. SQL state: {SqlState}",
+                normalizedEmail,
+                ex.SqlState);
             return null;
         }
     }
+
+    private async Task<DynamicInsertPlan> BuildDynamicInsertPlanAsync(
+        NpgsqlConnection conn,
+        string table,
+        string idColumn,
+        Func<ColumnSchema, ColumnValueResolution> knownValuesFactory,
+        CancellationToken ct)
+    {
+        var columns = await GetTableColumnsAsync(conn, table, ct);
+        if (columns.Count == 0)
+        {
+            throw new InvalidOperationException($"Table lighthouse.{table} has no discoverable columns.");
+        }
+
+        var insertColumns = new List<string>();
+        var insertExpressions = new List<string>();
+        var parameters = new Dictionary<string, object>();
+        var includeResolvedId = false;
+        var paramCounter = 0;
+
+        foreach (var column in columns)
+        {
+            if (string.Equals(column.Name, idColumn, StringComparison.OrdinalIgnoreCase))
+            {
+                includeResolvedId = true;
+                insertColumns.Add(QuoteIdentifier(column.Name));
+                insertExpressions.Add("(SELECT generated_id FROM resolved_id)");
+                continue;
+            }
+
+            var knownValue = knownValuesFactory(column);
+            if (knownValue.HasValue)
+            {
+                var paramName = $"p{paramCounter++}";
+                insertColumns.Add(QuoteIdentifier(column.Name));
+                insertExpressions.Add($"@{paramName}");
+                parameters[paramName] = knownValue.Value ?? DBNull.Value;
+                continue;
+            }
+
+            if (column.IsRequired)
+            {
+                var paramName = $"p{paramCounter++}";
+                insertColumns.Add(QuoteIdentifier(column.Name));
+                insertExpressions.Add($"@{paramName}");
+                parameters[paramName] = BuildGenericDefault(column);
+            }
+        }
+
+        if (insertColumns.Count == 0)
+        {
+            throw new InvalidOperationException($"No insertable columns were resolved for lighthouse.{table}.");
+        }
+
+        var sql = includeResolvedId
+            ? $$"""
+                WITH resolved_id AS (
+                    SELECT CASE
+                        WHEN pg_get_serial_sequence('lighthouse.{{table}}', '{{idColumn}}') IS NOT NULL
+                            THEN nextval(pg_get_serial_sequence('lighthouse.{{table}}', '{{idColumn}}'))
+                        ELSE (
+                            SELECT COALESCE(MAX({{QuoteIdentifier(idColumn)}}), 0) + 1
+                            FROM lighthouse.{{QuoteIdentifier(table)}}
+                        )
+                    END AS generated_id
+                )
+                INSERT INTO lighthouse.{{QuoteIdentifier(table)}} ({{string.Join(", ", insertColumns)}})
+                VALUES ({{string.Join(", ", insertExpressions)}})
+                RETURNING {{QuoteIdentifier(idColumn)}}
+                """
+            : $$"""
+                INSERT INTO lighthouse.{{QuoteIdentifier(table)}} ({{string.Join(", ", insertColumns)}})
+                VALUES ({{string.Join(", ", insertExpressions)}})
+                RETURNING {{QuoteIdentifier(idColumn)}}
+                """;
+
+        return new DynamicInsertPlan(sql, parameters);
+    }
+
+    private static ColumnValueResolution ResolveSupporterColumnValue(
+        ColumnSchema column,
+        string normalizedEmail,
+        string fallbackDisplayName,
+        string? firstName,
+        string? lastName)
+    {
+        var normalizedName = column.Name.ToLowerInvariant();
+        return normalizedName switch
+        {
+            "display_name" => ColumnValueResolution.WithValue(fallbackDisplayName),
+            "first_name" => string.IsNullOrWhiteSpace(firstName)
+                ? ColumnValueResolution.WithNoValue()
+                : ColumnValueResolution.WithValue(firstName.Trim()),
+            "last_name" => string.IsNullOrWhiteSpace(lastName)
+                ? ColumnValueResolution.WithNoValue()
+                : ColumnValueResolution.WithValue(lastName.Trim()),
+            "email" => ColumnValueResolution.WithValue(normalizedEmail),
+            "supporter_type" => ColumnValueResolution.WithValue("Individual"),
+            "relationship_type" => ColumnValueResolution.WithValue("Donor"),
+            "status" => ColumnValueResolution.WithValue("Active"),
+            "acquisition_channel" => ColumnValueResolution.WithValue("Web"),
+            "country" => ColumnValueResolution.WithValue("Unknown"),
+            "region" => ColumnValueResolution.WithValue("Unknown"),
+            "organization_name" => ColumnValueResolution.WithValue(string.Empty),
+            "phone" => ColumnValueResolution.WithValue(string.Empty),
+            "created_at" => ColumnValueResolution.WithValue(DateTime.UtcNow),
+            "updated_at" => ColumnValueResolution.WithValue(DateTime.UtcNow),
+            "first_donation_date" => ColumnValueResolution.WithValue(DateTime.UtcNow.Date),
+            _ => ColumnValueResolution.WithNoValue(),
+        };
+    }
+
+    private static ColumnValueResolution ResolveDonationColumnValue(
+        ColumnSchema column,
+        long supporterId,
+        decimal amount,
+        string? frequency)
+    {
+        var normalizedName = column.Name.ToLowerInvariant();
+        var recurring = string.Equals(frequency?.Trim(), "monthly", StringComparison.OrdinalIgnoreCase);
+        return normalizedName switch
+        {
+            "supporter_id" => ColumnValueResolution.WithValue(supporterId),
+            "donation_date" => ColumnValueResolution.WithValue(DateTime.UtcNow),
+            "donation_type" => ColumnValueResolution.WithValue("Monetary"),
+            "amount" => ColumnValueResolution.WithValue(amount),
+            "estimated_value" => ColumnValueResolution.WithValue(0m),
+            "campaign_name" => ColumnValueResolution.WithValue("Direct Web Donation"),
+            "channel_source" => ColumnValueResolution.WithValue("Web"),
+            "currency_code" => ColumnValueResolution.WithValue("USD"),
+            "frequency" => ColumnValueResolution.WithValue(string.IsNullOrWhiteSpace(frequency) ? "One-time" : frequency.Trim()),
+            "is_recurring" => column.DataType == "boolean"
+                ? ColumnValueResolution.WithValue(recurring)
+                : ColumnValueResolution.WithValue(recurring ? "True" : "False"),
+            "notes" => ColumnValueResolution.WithValue("Submitted via donor portal"),
+            "status" => ColumnValueResolution.WithValue("Completed"),
+            "created_at" => ColumnValueResolution.WithValue(DateTime.UtcNow),
+            "updated_at" => ColumnValueResolution.WithValue(DateTime.UtcNow),
+            _ => ColumnValueResolution.WithNoValue(),
+        };
+    }
+
+    private static object BuildGenericDefault(ColumnSchema column)
+    {
+        return column.DataType switch
+        {
+            "boolean" => false,
+            "smallint" or "integer" => 0,
+            "bigint" => 0L,
+            "numeric" or "decimal" or "real" or "double precision" or "money" => 0m,
+            "date" => DateTime.UtcNow.Date,
+            "timestamp without time zone" or "timestamp with time zone" => DateTime.UtcNow,
+            "uuid" => Guid.NewGuid(),
+            "json" or "jsonb" => "{}",
+            _ => string.Empty,
+        };
+    }
+
+    private async Task<IReadOnlyList<ColumnSchema>> GetTableColumnsAsync(NpgsqlConnection conn, string table, CancellationToken ct)
+    {
+        const string sql = """
+            SELECT column_name, is_nullable, column_default, is_identity, data_type
+            FROM information_schema.columns
+            WHERE table_schema = 'lighthouse' AND table_name = @table
+            ORDER BY ordinal_position
+            """;
+
+        var columns = new List<ColumnSchema>();
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("table", table);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var columnName = reader.GetString(0);
+            var isNullable = string.Equals(reader.GetString(1), "YES", StringComparison.OrdinalIgnoreCase);
+            var hasDefault = !reader.IsDBNull(2);
+            var isIdentity = !reader.IsDBNull(3) && string.Equals(reader.GetString(3), "YES", StringComparison.OrdinalIgnoreCase);
+            var dataType = reader.IsDBNull(4) ? "text" : reader.GetString(4);
+            columns.Add(new ColumnSchema(columnName, dataType, isNullable, hasDefault, isIdentity));
+        }
+
+        return columns;
+    }
+
+    private static string QuoteIdentifier(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
 
     private async Task<IReadOnlyCollection<DonationListItem>> ReadDonationsAsync(
         NpgsqlConnection conn,
@@ -338,13 +485,77 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
             .ToArray();
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationByIdQuery(long donationId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationByIdQuery(long donationId, DonationQueryShape queryShape)
     {
-        var sql = BaseDonationProjection() + "\nWHERE d.donation_id = @donation_id\nORDER BY d.donation_date DESC, i.item_id";
+        var sql = BaseDonationProjection(queryShape) + "\nWHERE d.donation_id = @donation_id\nORDER BY d.donation_date DESC, i.item_id";
         return (sql, new Dictionary<string, object> { ["donation_id"] = donationId });
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(long supporterId)
+    {
+        // Keep the donor-facing ledger query minimal and resilient:
+        // only columns required for historical donation timeline are read.
+        const string sql = """
+            SELECT
+                d.donation_id,
+                d.donation_date,
+                COALESCE(d.donation_type, 'Unknown') AS donation_type,
+                COALESCE(d.amount, 0) AS amount,
+                d.supporter_id,
+                s.display_name
+            FROM lighthouse.donations d
+            JOIN lighthouse.supporters s ON s.supporter_id = d.supporter_id
+            WHERE d.supporter_id = @supporter_id
+            ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC
+            """;
+
+        return (sql, new Dictionary<string, object> { ["supporter_id"] = supporterId });
+    }
+
+    private static async Task<IReadOnlyCollection<DonationListItem>> ReadCurrentUserDonationsAsync(
+        NpgsqlConnection conn,
+        string sql,
+        IReadOnlyDictionary<string, object> parameters,
+        CancellationToken ct)
+    {
+        var items = new List<DonationListItem>();
+
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        AddParameters(cmd, parameters);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var donationId = reader.GetInt64(0);
+            var donationDate = GetDateTimeOffsetOrNull(reader, 1);
+            var donationType = GetStringOrEmpty(reader, 2);
+            var amount = GetDecimalOrZero(reader, 3);
+            var supporterId = reader.GetInt64(4);
+            var displayName = GetStringOrNull(reader, 5);
+
+            items.Add(new DonationListItem(
+                donationId,
+                donationDate,
+                donationType,
+                amount,
+                0m,
+                null,
+                null,
+                null,
+                null,
+                supporterId,
+                string.IsNullOrWhiteSpace(displayName) ? "Unknown supporter" : displayName,
+                null,
+                null,
+                []));
+        }
+
+        return items;
+    }
+
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(
+        NormalizedDonationFilters filters,
+        long? scopedSupporterId,
+        DonationQueryShape queryShape)
     {
         var where = new List<string>();
         var parameters = new Dictionary<string, object>();
@@ -365,7 +576,7 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         AddTextFilter(where, parameters, "d.campaign_name", "campaign_name", filters.Campaign);
         AddTextFilter(where, parameters, "d.channel_source", "channel_source", filters.ChannelSource);
         AddTextFilter(where, parameters, "s.supporter_type", "supporter_type", filters.SupporterType);
-        AddTextFilter(where, parameters, "d.frequency", "frequency", filters.Frequency);
+        AddTextFilter(where, parameters, queryShape.FrequencyFilterExpression, "frequency", filters.Frequency);
 
         if (scopedSupporterId is { } supporterId)
         {
@@ -378,7 +589,7 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         parameters["offset"] = (filters.Page - 1) * filters.PageSize;
 
         var sql = $$"""
-            {{BaseDonationProjection()}}
+            {{BaseDonationProjection(queryShape)}}
             {{whereClause}}
             ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC, i.item_id
             LIMIT @limit OFFSET @offset
@@ -387,7 +598,10 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         return (sql, parameters);
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationCountQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationCountQuery(
+        NormalizedDonationFilters filters,
+        long? scopedSupporterId,
+        DonationQueryShape queryShape)
     {
         var where = new List<string>();
         var parameters = new Dictionary<string, object>();
@@ -408,7 +622,7 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         AddTextFilter(where, parameters, "d.campaign_name", "campaign_name", filters.Campaign);
         AddTextFilter(where, parameters, "d.channel_source", "channel_source", filters.ChannelSource);
         AddTextFilter(where, parameters, "s.supporter_type", "supporter_type", filters.SupporterType);
-        AddTextFilter(where, parameters, "d.frequency", "frequency", filters.Frequency);
+        AddTextFilter(where, parameters, queryShape.FrequencyFilterExpression, "frequency", filters.Frequency);
 
         if (scopedSupporterId is { } supporterId)
         {
@@ -427,8 +641,8 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         return (sql, parameters);
     }
 
-    private static string BaseDonationProjection() =>
-        """
+    private static string BaseDonationProjection(DonationQueryShape queryShape) =>
+        $$"""
         SELECT
             d.donation_id,
             d.donation_date,
@@ -437,7 +651,7 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
             COALESCE(d.estimated_value, 0) AS estimated_value,
             d.campaign_name,
             d.channel_source,
-            d.frequency,
+            {{queryShape.FrequencySelectExpression}} AS frequency,
             d.notes,
             d.supporter_id,
             s.display_name,
@@ -456,6 +670,30 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         JOIN lighthouse.supporters s ON s.supporter_id = d.supporter_id
         LEFT JOIN lighthouse.in_kind_donation_items i ON i.donation_id = d.donation_id
         """;
+
+    private async Task<DonationQueryShape> GetDonationQueryShapeAsync(NpgsqlConnection conn, CancellationToken ct)
+    {
+        var columns = await GetTableColumnsAsync(conn, "donations", ct);
+        var names = columns
+            .Select(x => x.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // NOTE: Some deployed databases still expose recurring cadence as is_recurring
+        // instead of frequency. Build SQL against whichever column set exists so the
+        // admin donations view does not fail during phased schema rollouts.
+        if (names.Contains("frequency"))
+        {
+            return new DonationQueryShape("d.frequency", "d.frequency");
+        }
+
+        if (names.Contains("is_recurring"))
+        {
+            const string recurringExpression = "CASE WHEN d.is_recurring IS TRUE THEN 'Monthly' WHEN d.is_recurring IS FALSE THEN 'One-time' ELSE NULL END";
+            return new DonationQueryShape(recurringExpression, recurringExpression);
+        }
+
+        return DonationQueryShape.Default;
+    }
 
     private static string BuildSupporterDisplayName(string normalizedEmail, string? firstName, string? lastName)
     {
@@ -490,9 +728,9 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         return "Unknown supporter";
     }
 
-    private static void AddTextFilter(List<string> where, Dictionary<string, object> parameters, string field, string parameterName, string? value)
+    private static void AddTextFilter(List<string> where, Dictionary<string, object> parameters, string? field, string parameterName, string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(field) || string.IsNullOrWhiteSpace(value))
         {
             return;
         }
@@ -606,7 +844,9 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         return value switch
         {
             DateTimeOffset dto => dto,
-            DateTime dt => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+            DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+            DateOnly dateOnly => new DateTimeOffset(
+                DateTime.SpecifyKind(dateOnly.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)),
             _ => null
         };
     }
@@ -634,6 +874,36 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
         string? Frequency,
         int Page,
         int PageSize);
+
+    private sealed record DynamicInsertPlan(
+        string Sql,
+        IReadOnlyDictionary<string, object> Parameters);
+
+    private sealed record DonationQueryShape(
+        string FrequencySelectExpression,
+        string? FrequencyFilterExpression)
+    {
+        public static DonationQueryShape Default { get; } = new("NULL::text", null);
+    }
+
+    private sealed record ColumnSchema(
+        string Name,
+        string DataType,
+        bool IsNullable,
+        bool HasDefault,
+        bool IsIdentity)
+    {
+        public bool IsRequired => !IsNullable && !HasDefault && !IsIdentity;
+    }
+
+    private readonly struct ColumnValueResolution(bool hasValue, object? value)
+    {
+        public bool HasValue { get; } = hasValue;
+        public object? Value { get; } = value;
+
+        public static ColumnValueResolution WithValue(object? value) => new(true, value);
+        public static ColumnValueResolution WithNoValue() => new(false, null);
+    }
 
     private sealed class DonationAggregateRow(
         long donationId,

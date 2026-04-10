@@ -23,6 +23,19 @@
   --font-serif: 'Playfair Display', Georgia, serif;
 }
 
+[data-theme="dark"] {
+  --color-bg: #0f1923;
+  --color-surface: #1a2535;
+  --color-text: #e2e8f0;
+  --color-subtle: #94a3b8;
+  --color-border: #2d3f50;
+  --color-primary: #4a9d9d;
+  --color-primary-contrast: #ffffff;
+  --color-secondary: #1e3a3a;
+  --color-accent-soft: #3a1f15;
+  --color-muted-track: #1e2f3d;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -61,6 +74,9 @@ body {
 }
 
 .container {
+  width: 100%;
+  /* Change this from 800px or 600px to 1200px or even 1400px */
+  max-width: 1200px; 
   width: 100%;
   /* Change this from 800px or 600px to 1200px or even 1400px */
   max-width: 1200px; 
@@ -1370,6 +1386,8 @@ select {
   .notebook-card:hover {
     transform: translateY(-6px) !important;
   }
+
+
 .main-wrapper {
   margin-top: 100px !important; /* Forces the gap even if other styles resist */
   min-height: 80vh; /* Ensures the page doesn't look empty */

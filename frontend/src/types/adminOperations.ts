@@ -63,6 +63,10 @@ export type HomeVisitItem = {
   visitDate: string
   visitType: string
   status: string
+  homeEnvironmentObservations: string
+  familyCooperationLevel: string
+  safetyConcernsIdentified: boolean
+  followUpActions: string
   notes: string
 }
 

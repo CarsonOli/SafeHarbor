@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SafeHarbor.Data;
@@ -11,9 +12,11 @@ using SafeHarbor.Data;
 namespace SafeHarbor.Migrations
 {
     [DbContext(typeof(SafeHarborDbContext))]
-    partial class SafeHarborDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260410095610_RenameDonorPersistenceToSupporters")]
+    partial class RenameDonorPersistenceToSupporters
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -258,21 +261,6 @@ namespace SafeHarbor.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<string>("FamilyCooperationLevel")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("family_cooperation_level");
-
-                    b.Property<string>("FollowUpActions")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("follow_up_actions");
-
-                    b.Property<string>("HomeEnvironmentObservations")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("home_environment_observations");
-
                     b.Property<string>("Notes")
                         .IsRequired()
                         .HasColumnType("text")
@@ -281,10 +269,6 @@ namespace SafeHarbor.Migrations
                     b.Property<Guid>("ResidentCaseId")
                         .HasColumnType("uuid")
                         .HasColumnName("resident_case_id");
-
-                    b.Property<bool>("SafetyConcernsIdentified")
-                        .HasColumnType("boolean")
-                        .HasColumnName("safety_concerns_identified");
 
                     b.Property<int>("StatusStateId")
                         .HasColumnType("integer")

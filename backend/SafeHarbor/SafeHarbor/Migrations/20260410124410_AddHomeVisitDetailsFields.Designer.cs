@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SafeHarbor.Data;
@@ -11,9 +12,11 @@ using SafeHarbor.Data;
 namespace SafeHarbor.Migrations
 {
     [DbContext(typeof(SafeHarborDbContext))]
-    partial class SafeHarborDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260410124410_AddHomeVisitDetailsFields")]
+    partial class AddHomeVisitDetailsFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

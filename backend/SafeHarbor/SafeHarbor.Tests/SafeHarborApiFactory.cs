@@ -54,7 +54,7 @@ public sealed class SafeHarborApiFactory : WebApplicationFactory<Program>
 
         var safehouseId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var residentCaseId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-        var donorId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var supporterId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var contributionId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
         if (!db.Safehouses.Any())
@@ -137,13 +137,13 @@ public sealed class SafeHarborApiFactory : WebApplicationFactory<Program>
                 });
         }
 
-        if (!db.Donors.Any())
+        if (!db.Supporters.Any())
         {
-            db.Donors.Add(new Donor
+            db.Supporters.Add(new Supporter
             {
-                Id = donorId,
-                Name = "Donor One",
-                DisplayName = "Donor One",
+                Id = supporterId,
+                Name = "Supporter One",
+                DisplayName = "Supporter One",
                 Email = "donor1@example.com",
                 LastActivityAt = DateTimeOffset.UtcNow,
                 LifetimeDonations = 100m
@@ -155,7 +155,7 @@ public sealed class SafeHarborApiFactory : WebApplicationFactory<Program>
             db.Contributions.Add(new Contribution
             {
                 Id = contributionId,
-                DonorId = donorId,
+                SupporterId = supporterId,
                 Amount = 100m,
                 ContributionTypeId = 1,
                 StatusStateId = 1,
@@ -166,3 +166,5 @@ public sealed class SafeHarborApiFactory : WebApplicationFactory<Program>
         db.SaveChanges();
     }
 }
+
+

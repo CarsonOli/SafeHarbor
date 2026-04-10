@@ -19,7 +19,7 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
 
             if (string.Equals(databaseRole, "user", StringComparison.Ordinal))
             {
-                await EnsureDonorAsync(normalizedEmail, firstName, lastName, cancellationToken);
+                await EnsureSupporterAsync(normalizedEmail, firstName, lastName, cancellationToken);
                 return;
             }
 
@@ -30,7 +30,7 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
         }
         catch (PostgresException ex) when (IsMissingDomainProfileSchema(ex))
         {
-            // NOTE: Domain profile tables (donors/user_profiles/roles/user_roles) may be absent in
+            // NOTE: Domain profile tables (supporters/user_profiles/roles/user_roles) may be absent in
             // partially provisioned environments. Registration should still succeed for lighthouse.users.
             // Operators can backfill profiles later via auth-maintenance reconciliation after schema sync.
             return;
@@ -75,13 +75,13 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
             roleRowsCreated);
     }
 
-    private async Task EnsureDonorAsync(string normalizedEmail, string? firstName, string? lastName, CancellationToken cancellationToken)
+    private async Task EnsureSupporterAsync(string normalizedEmail, string? firstName, string? lastName, CancellationToken cancellationToken)
     {
         // NOTE: Reconciliation can stage multiple inserts in one unit-of-work; we must check tracked
         // additions first so repeated emails in the same run remain idempotent before SaveChanges.
-        var existingDonor = dbContext.Donors.Local
+        var existingDonor = dbContext.Supporters.Local
             .FirstOrDefault(d => string.Equals(d.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
-            ?? await dbContext.Donors
+            ?? await dbContext.Supporters
                 .FirstOrDefaultAsync(d => d.Email.ToLower() == normalizedEmail, cancellationToken);
 
         if (existingDonor is not null)
@@ -90,7 +90,7 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
         }
 
         var displayName = BuildDisplayName(normalizedEmail, firstName, lastName);
-        dbContext.Donors.Add(new Donor
+        dbContext.Supporters.Add(new Supporter
         {
             Id = Guid.NewGuid(),
             Name = displayName,
@@ -158,14 +158,14 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
     private async Task<ProvisioningCounters> EnsureProvisionedForUserInternalAsync(Guid userId, string email, string databaseRole, string? firstName, string? lastName, CancellationToken cancellationToken)
     {
         var counters = new ProvisioningCounters();
-        var beforeDonors = dbContext.ChangeTracker.Entries<Donor>().Count(e => e.State == EntityState.Added);
+        var beforeDonors = dbContext.ChangeTracker.Entries<Supporter>().Count(e => e.State == EntityState.Added);
         var beforeProfiles = dbContext.ChangeTracker.Entries<UserProfile>().Count(e => e.State == EntityState.Added);
         var beforeRoles = dbContext.ChangeTracker.Entries<Role>().Count(e => e.State == EntityState.Added);
         var beforeLinks = dbContext.ChangeTracker.Entries<UserRole>().Count(e => e.State == EntityState.Added);
 
         await EnsureProvisionedForUserAsync(userId, email, databaseRole, firstName, lastName, cancellationToken);
 
-        counters.DonorProfilesCreated = dbContext.ChangeTracker.Entries<Donor>().Count(e => e.State == EntityState.Added) - beforeDonors;
+        counters.DonorProfilesCreated = dbContext.ChangeTracker.Entries<Supporter>().Count(e => e.State == EntityState.Added) - beforeDonors;
         counters.UserProfilesCreated = dbContext.ChangeTracker.Entries<UserProfile>().Count(e => e.State == EntityState.Added) - beforeProfiles;
         counters.RoleRowsCreated = dbContext.ChangeTracker.Entries<Role>().Count(e => e.State == EntityState.Added) - beforeRoles;
         counters.UserRoleLinksCreated = dbContext.ChangeTracker.Entries<UserRole>().Count(e => e.State == EntityState.Added) - beforeLinks;
@@ -178,7 +178,7 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
     private static bool IsMissingDomainProfileSchema(PostgresException ex) =>
         ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
 
-    // NOTE: We use a deterministic fallback display name from email local-part so donor/staff
+    // NOTE: We use a deterministic fallback display name from email local-part so supporter/staff
     // records are immediately queryable even when registration omits first/last names.
     private static string BuildDisplayName(string normalizedEmail, string? firstName, string? lastName)
     {
@@ -200,3 +200,5 @@ public sealed class DomainProfileProvisioningService(SafeHarborDbContext dbConte
         public int RoleRowsCreated { get; set; }
     }
 }
+
+

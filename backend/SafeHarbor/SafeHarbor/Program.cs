@@ -146,7 +146,16 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+        var configuredOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+        var flattenedOrigins = (builder.Configuration["AllowedOrigins"] ?? string.Empty)
+            .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var allowedOrigins = configuredOrigins
+            .Concat(flattenedOrigins)
+            .Select(origin => origin.Trim().TrimEnd('/'))
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         if (allowedOrigins.Length > 0)
         {
             policy.WithOrigins(allowedOrigins)
@@ -195,6 +204,7 @@ builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>(
 builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
 builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
 builder.Services.AddScoped<IDonorContributionService, DonorContributionService>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddScoped<IReportsAnalyticsService, ReportsAnalyticsService>();
 builder.Services.AddScoped<IImpactAggregateService, ImpactAggregateService>();
 builder.Services.AddScoped<IDonorRiskFlagService, DonorRiskFlagService>();
@@ -269,6 +279,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+// Apply any pending EF Core migrations on startup so the database schema stays in sync
+// with the deployed code. MigrateAsync is idempotent — it checks __EFMigrationsHistory
+// and only runs migrations that haven't been applied yet.
+if (!useInMemoryPersistence)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 if (useInMemoryPersistence)
 {
