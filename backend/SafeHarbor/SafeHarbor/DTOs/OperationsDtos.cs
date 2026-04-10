@@ -18,6 +18,13 @@ public sealed record ContributionListItem(Guid Id, string DonorName, decimal Amo
 public sealed record ConferenceListItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
 public sealed record OutcomeSummaryItem(DateOnly SnapshotDate, int TotalResidentsServed, int TotalHomeVisits, decimal TotalContributions);
 
+public sealed record CaseloadLookupItem(int Id, string Name);
+public sealed record CaseloadSafehouseItem(string Id, string Name);
+public sealed record CaseloadLookupsResponse(
+    IReadOnlyCollection<CaseloadSafehouseItem> Safehouses,
+    IReadOnlyCollection<CaseloadLookupItem> CaseCategories,
+    IReadOnlyCollection<CaseloadLookupItem> StatusStates);
+
 public sealed record DonorListItem(Guid Id, string Name, string Email, DateTimeOffset LastActivityAt, decimal LifetimeContributions);
 public sealed record CreateDonorRequest([property: Required, StringLength(120, MinimumLength = 2)] string Name, [property: Required, EmailAddress] string Email);
 
@@ -43,6 +50,7 @@ public sealed record ResidentCaseListItem(
     int StatusStateId,
     string Status,
     string? SocialWorkerExternalId,
+    string? ResidentName,
     DateTimeOffset OpenedAt,
     DateTimeOffset? ClosedAt);
 
@@ -62,8 +70,38 @@ public sealed record UpdateResidentCaseRequest(
     Guid? ResidentUserId,
     DateTimeOffset? ClosedAt);
 
-public sealed record ProcessRecordItem(Guid Id, Guid ResidentCaseId, DateTimeOffset RecordedAt, string Summary);
-public sealed record CreateProcessRecordRequest([property: Required] Guid ResidentCaseId, [property: Required, StringLength(4000, MinimumLength = 3)] string Summary, DateTimeOffset? RecordedAt);
+public sealed record ProcessRecordItem(
+    Guid Id,
+    Guid ResidentCaseId,
+    DateTimeOffset RecordedAt,
+    string SocialWorker,
+    string SessionType,
+    int? SessionDurationMinutes,
+    string EmotionalStateObserved,
+    string? EmotionalStateEnd,
+    string Summary,
+    string? InterventionsApplied,
+    string? FollowUpActions,
+    bool ProgressNoted,
+    bool ConcernsFlagged,
+    bool ReferralMade,
+    bool NotesRestricted);
+
+public sealed record CreateProcessRecordRequest(
+    [property: Required] Guid ResidentCaseId,
+    [property: Required, StringLength(120, MinimumLength = 2)] string SocialWorker,
+    [property: Required] string SessionType,
+    int? SessionDurationMinutes,
+    [property: Required, StringLength(60, MinimumLength = 2)] string EmotionalStateObserved,
+    string? EmotionalStateEnd,
+    [property: Required, StringLength(8000, MinimumLength = 3)] string Summary,
+    string? InterventionsApplied,
+    string? FollowUpActions,
+    bool ProgressNoted,
+    bool ConcernsFlagged,
+    bool ReferralMade,
+    string? NotesRestricted,
+    DateTimeOffset? RecordedAt);
 
 public sealed record HomeVisitItem(Guid Id, Guid ResidentCaseId, DateTimeOffset VisitDate, string VisitType, string Status, string Notes);
 public sealed record CaseConferenceItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);

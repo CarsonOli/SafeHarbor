@@ -347,6 +347,9 @@ namespace SafeHarbor.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("ConcernsFlagged")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -357,11 +360,44 @@ namespace SafeHarbor.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("EmotionalStateEnd")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmotionalStateObserved")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FollowUpActions")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InterventionsApplied")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NotesRestricted")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ProgressNoted")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset>("RecordedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("ReferralMade")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("ResidentCaseId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("SessionDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SessionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SocialWorker")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Summary")
                         .IsRequired()

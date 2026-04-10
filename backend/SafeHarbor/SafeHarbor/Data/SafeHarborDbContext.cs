@@ -21,6 +21,7 @@ namespace SafeHarbor.Data
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<StatusState> StatusState { get; set; }
+        public DbSet<CaseCategory> CaseCategories { get; set; }
 
         // --- The Rest of the 17 ---
         public DbSet<Resident> Residents { get; set; }

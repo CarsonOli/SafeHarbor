@@ -165,24 +165,15 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IDataRetentionRedactionService, DataRetentionRedactionService>();
 
-if (useInMemoryPersistence)
-{
-    // NOTE: In-memory persistence is an explicit development-only fallback for demos or local debugging.
-    // Deployed environments must remain DB-backed to preserve durable data and operational consistency.
-    builder.Services.AddSingleton<InMemoryDataStore>();
-    builder.Services.AddScoped<IResidentRepository, InMemoryResidentRepository>();
-    builder.Services.AddScoped<IDonorRepository, InMemoryDonorRepository>();
-    builder.Services.AddScoped<ICampaignRepository, InMemoryCampaignRepository>();
-    builder.Services.AddScoped<IContributionRepository, InMemoryContributionRepository>();
-}
-else
-{
-    builder.Services.AddScoped<IResidentRepository, DbResidentRepository>();
-    builder.Services.AddScoped<IDonorRepository, DbDonorRepository>();
-    builder.Services.AddScoped<ICampaignRepository, DbCampaignRepository>();
-    builder.Services.AddScoped<IContributionRepository, DbContributionRepository>();
-}
+// --- REPOSITORY REGISTRATION ---
+// We remove the 'if' check to ensure Render ALWAYS uses the Postgres database.
+// If you ever need to go back to In-Memory locally, you can toggle it here manually.
+builder.Services.AddScoped<IResidentRepository, DbResidentRepository>();
+builder.Services.AddScoped<IDonorRepository, DbDonorRepository>();
+builder.Services.AddScoped<ICampaignRepository, DbCampaignRepository>();
+builder.Services.AddScoped<IContributionRepository, DbContributionRepository>();
 
+// --- SERVICE REGISTRATION ---
 builder.Services.AddScoped<IResidentAdminService, ResidentAdminService>();
 builder.Services.AddScoped<IDonorAdminService, DonorAdminService>();
 builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
@@ -193,10 +184,12 @@ builder.Services.AddScoped<IDomainProfileProvisioningService, DomainProfileProvi
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 
-// Donor impact calculator — used by DonorDashboardController to compute "girls helped" metric.
-// TO SWAP IN AN ML MODEL: replace RuleBasedImpactCalculator with your MlImpactCalculator class here.
-// The controller and frontend are unaffected by this change.
+// --- DONOR IMPACT CALCULATOR ---
+// This is the "Girls Helped" logic. If you have an ML model class (e.g., MlImpactCalculator), 
+// swap 'RuleBasedImpactCalculator' for your new class name below.
 builder.Services.AddSingleton<IDonorImpactCalculator, RuleBasedImpactCalculator>();
+
+// --- ADDITIONAL BUSINESS LOGIC ---
 builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>();
 builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
 builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
@@ -328,7 +321,10 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseCors();
 // Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;600;700&display=swap');
 
 :root {
   /* Brand Colors - High-End Teal Palette */
@@ -41,6 +41,7 @@ body {
   line-height: 1.55;
   background: var(--color-bg);
   color: var(--color-text);
+  overflow-x: hidden; /* prevent full-bleed hero from causing horizontal scroll */
 }
 
 #root {
@@ -1079,4 +1080,258 @@ select {
 /* Ensure the header doesn't get too tall with the new logo */
 .nav-container {
   padding: var(--space-2) 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — TABLET & MOBILE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤ 768px) ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Tighten page vertical padding */
+  .page-content {
+    padding-top: var(--space-6);
+    padding-bottom: var(--space-6);
+  }
+
+  /* Hero: shorter and tighter on tablet */
+  .hero-wrapper {
+    min-height: 65vh;
+  }
+
+  .hero-content h1 {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+  }
+
+  .hero-content .lead {
+    font-size: 1.05rem;
+  }
+
+  /* Social Media Strategy — remove redundant side padding (container already handles it) */
+  .sm-page {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+    padding-top: var(--space-6);
+    padding-bottom: var(--space-6);
+  }
+
+  /* Stack donate side-by-side fields */
+  .donate-field-row {
+    flex-direction: column;
+  }
+
+  /* Feature cards: always single column below tablet if only 1–2 items */
+  .feature-grid,
+  .metric-grid,
+  .chart-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+/* ── Mobile (≤ 600px) ─────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Even less page padding on small phones */
+  .page-content {
+    padding-top: var(--space-5);
+    padding-bottom: var(--space-5);
+  }
+
+  /* Hero: compact on small phones */
+  .hero-wrapper {
+    min-height: 55vh;
+  }
+
+  .hero-content {
+    padding: 0 var(--space-4);
+  }
+
+  .hero-content h1 {
+    font-size: clamp(1.75rem, 8vw, 2.6rem);
+  }
+
+  .hero-content .lead {
+    font-size: 0.95rem;
+    margin-bottom: var(--space-4);
+  }
+
+  /* Hero CTA buttons: stack on very small phones */
+  .cta-row {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .button-donate-hero,
+  .button-ghost {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* Compact the sign-out button in the header */
+  .header-actions .button {
+    font-size: 0.78rem;
+    padding: var(--space-1) var(--space-3);
+  }
+
+  /* Remove sm-page side padding entirely on phones */
+  .sm-page {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Single-column feature grid */
+  .feature-grid,
+  .metric-grid,
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Tighten feature card padding on mobile */
+  .hero-card,
+  .feature-card,
+  .metric-card,
+  .chart-card {
+    padding: var(--space-4);
+  }
+
+  /* Donation page: tighten card padding */
+  .donate-form-card,
+  .donate-hero {
+    padding: var(--space-4);
+  }
+
+  /* Auth card full-width on mobile */
+  .auth-card {
+    padding: var(--space-4);
+  }
+
+  /* Modal fills available space on phones */
+  .modal {
+    padding: var(--space-4);
+  }
+
+  /* Don't lift feature cards on touch (hover state stays clean) */
+  .feature-card:hover {
+    transform: none;
+  }
+
+  /* Bar list: tighter label column */
+  .bar-list li {
+    grid-template-columns: 2.5rem 1fr 2.5rem;
+  }
+}
+
+/* ── Extra-small (≤ 400px) ───────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  /* Hide brand name text, keep logo only — saves ~80px on tiny screens */
+  .brand {
+    display: none;
+  }
+
+  /* Ensure logo link stays aligned */
+  .header-brand-group {
+    gap: var(--space-2);
+  }
+}
+
+/* =============================================
+   STORIES SECTION — Handwritten Notebook Style
+   ============================================= */
+
+.stories-section {
+  background: #faf7f0;
+  padding: 5rem 0 6rem;
+  margin-top: var(--space-8);
+}
+
+.stories-heading {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  color: var(--color-text);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.stories-subheading {
+  font-family: 'Caveat', cursive;
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.stories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-6);
+  padding-top: var(--space-6);
+  align-items: start;
+}
+
+.notebook-card {
+  background: #fffef5;
+  border-radius: 2px;
+  padding: 2rem 2rem 2.5rem 3.75rem;
+  position: relative;
+  transform: rotate(var(--card-rotation, 0deg));
+  box-shadow: 3px 4px 18px rgba(0, 0, 0, 0.13), 1px 1px 0 #e8e0cc;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    #c8dada 27px,
+    #c8dada 28px
+  );
+  background-size: 100% 28px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.notebook-card:hover {
+  transform: rotate(0deg) translateY(-8px);
+  box-shadow: 6px 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.notebook-margin-line {
+  position: absolute;
+  left: 3rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(210, 65, 65, 0.35);
+  border-radius: 1px;
+}
+
+.notebook-role {
+  font-family: 'Caveat', cursive;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  display: block;
+  margin-bottom: 0.6rem;
+  line-height: 1.2;
+}
+
+.notebook-quote {
+  font-family: 'Caveat', cursive;
+  font-size: 1.3rem;
+  line-height: 1.85;
+  color: #2a2015;
+  margin: 0;
+  font-style: normal;
+}
+
+@media (max-width: 768px) {
+  .stories-grid {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .notebook-card {
+    transform: rotate(0deg) !important;
+  }
+
+  .notebook-card:hover {
+    transform: translateY(-6px) !important;
+  }
 }

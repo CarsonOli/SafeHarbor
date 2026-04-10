@@ -5,6 +5,7 @@ import type {
   PagingQuery,
   DonorListItem,
   ResidentCaseListItem,
+  CaseloadLookupsResponse,
   ProcessRecordItem,
   HomeVisitItem,
   CaseConferenceItem,
@@ -59,6 +60,14 @@ export async function createDonor(name: string, email: string): Promise<void> {
   await readJson<unknown>(response, endpoint, 'POST')
 }
 
+export async function fetchCaseloadLookups(): Promise<CaseloadLookupsResponse> {
+  const endpoint = '/api/admin/caseload/lookups'
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    headers: buildAuthHeaders({ Accept: 'application/json' }),
+  })
+  return readJson<CaseloadLookupsResponse>(response, endpoint)
+}
+
 export async function fetchResidentCases(query: PagingQuery): Promise<PagedResult<ResidentCaseListItem>> {
   const endpoint = '/api/admin/caseload/residents'
   const response = await fetch(`${API_BASE}${endpoint}?${toQueryString(query)}`, {
@@ -75,14 +84,29 @@ export async function fetchProcessRecordings(query: PagingQuery): Promise<PagedR
   return readJson<PagedResult<ProcessRecordItem>>(response, endpoint)
 }
 
-export async function createProcessRecording(residentCaseId: string, summary: string): Promise<void> {
+export async function createProcessRecording(payload: {
+  residentCaseId: string
+  socialWorker: string
+  sessionType: string
+  sessionDurationMinutes: number | null
+  emotionalStateObserved: string
+  emotionalStateEnd: string
+  summary: string
+  interventionsApplied: string
+  followUpActions: string
+  progressNoted: boolean
+  concernsFlagged: boolean
+  referralMade: boolean
+  notesRestricted: string
+  recordedAt?: string
+}): Promise<ProcessRecordItem> {
   const endpoint = '/api/admin/process-recordings'
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     headers: buildAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
-    body: JSON.stringify({ residentCaseId, summary }),
+    body: JSON.stringify(payload),
   })
-  await readJson<unknown>(response, endpoint, 'POST')
+  return readJson<ProcessRecordItem>(response, endpoint, 'POST')
 }
 
 export async function fetchVisitLogs(query: PagingQuery): Promise<PagedResult<HomeVisitItem>> {
