@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchCaseloadLookups, fetchResidentCases } from '../../services/adminOperationsApi'
+import { fetchCaseloadLookups, fetchResidentCases, deleteResidentCase } from '../../services/adminOperationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
 import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
+import { useAuth } from '../../auth/AuthContext'
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Expanded detail row ──────────────────────────────────────────────────────
 
-function CaseDetail({ item }: { item: ResidentCaseListItem }) {
+function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem; onDelete?: () => void; isDeleting?: boolean }) {
   const shortId = item.id.split('-')[0].toUpperCase()
   return (
     <tr>
@@ -53,6 +54,26 @@ function CaseDetail({ item }: { item: ResidentCaseListItem }) {
           <div><span style={{ color: '#64748b' }}>Closed</span><br />{item.closedAt ? new Date(item.closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Open'}</div>
           <div><span style={{ color: '#64748b' }}>Safehouse</span><br />{item.safehouse}</div>
         </div>
+        {onDelete && (
+          <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              style={{
+                padding: '4px 14px',
+                fontSize: '0.8rem',
+                border: '1px solid #fca5a5',
+                borderRadius: '5px',
+                background: '#fee2e2',
+                color: '#991b1b',
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                opacity: isDeleting ? 0.6 : 1,
+              }}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete case'}
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   )
@@ -61,12 +82,16 @@ function CaseDetail({ item }: { item: ResidentCaseListItem }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function CaseloadInventoryPage() {
+  const { session } = useAuth()
+  const isAdmin = session?.role === 'Admin'
+
   const [lookups, setLookups] = useState<CaseloadLookupsResponse | null>(null)
   const [items, setItems] = useState<ResidentCaseListItem[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // filters
   const [search, setSearch] = useState('')
@@ -123,6 +148,21 @@ export function CaseloadInventoryPage() {
     void load()
     return () => { cancelled = true }
   }, [page, PAGE_SIZE, debouncedSearch, statusStateId, categoryId, safehouseId, desc])
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Are you sure you want to delete this case? This cannot be undone.')) return
+    setDeletingId(id)
+    try {
+      await deleteResidentCase(id)
+      setItems((prev) => prev.filter((x) => x.id !== id))
+      setTotalCount((prev) => prev - 1)
+      if (expandedId === id) setExpandedId(null)
+    } catch (err) {
+      setError(toUserFacingError(err, 'Failed to delete case'))
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   function resetFilters() {
     setSearch(''); setStatusStateId(''); setCategoryId(''); setSafehouseId(''); setPage(1)
@@ -284,7 +324,14 @@ export function CaseloadInventoryPage() {
                     </button>
                   </td>
                 </tr>
-                {expandedId === item.id && <CaseDetail key={`detail-${item.id}`} item={item} />}
+                {expandedId === item.id && (
+                  <CaseDetail
+                    key={`detail-${item.id}`}
+                    item={item}
+                    onDelete={isAdmin ? () => void handleDelete(item.id) : undefined}
+                    isDeleting={deletingId === item.id}
+                  />
+                )}
               </>
             ))}
           </tbody>

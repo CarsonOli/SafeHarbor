@@ -132,3 +132,12 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
   })
   return readJson<PagedResult<CaseConferenceItem>>(response, endpoint)
 }
+
+export async function deleteResidentCase(id: string): Promise<void> {
+  const endpoint = `/api/admin/caseload/residents/${id}`
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders({ Accept: 'application/json' }),
+  })
+  await readJson<unknown>(response, endpoint, 'DELETE')
+}
