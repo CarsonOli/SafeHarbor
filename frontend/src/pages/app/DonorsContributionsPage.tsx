@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createDonor, fetchDonors } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { DonorListItem } from '../../types/adminOperations'
 
 export function DonorsContributionsPage() {
@@ -26,7 +27,7 @@ export function DonorsContributionsPage() {
           setTotalCount(data.totalCount)
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load donors')
+        if (!cancelled) setError(toUserFacingError(err, 'Failed to load donors'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -52,7 +53,7 @@ export function DonorsContributionsPage() {
       setItems(data.items)
       setTotalCount(data.totalCount)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save donor')
+      setError(toUserFacingError(err, 'Failed to save donor'))
     }
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchResidentCases } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { ResidentCaseListItem } from '../../types/adminOperations'
 
 export function CaseloadInventoryPage() {
@@ -29,7 +30,7 @@ export function CaseloadInventoryPage() {
           setError(null)
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load caseload')
+        if (!cancelled) setError(toUserFacingError(err, 'Failed to load caseload'))
       } finally {
         if (!cancelled) setLoading(false)
       }

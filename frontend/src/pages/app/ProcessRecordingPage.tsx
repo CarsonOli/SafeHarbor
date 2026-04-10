@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createProcessRecording, fetchProcessRecordings } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { ProcessRecordItem } from '../../types/adminOperations'
 
 export function ProcessRecordingPage() {
@@ -21,7 +22,7 @@ export function ProcessRecordingPage() {
       setTotalCount(data.totalCount)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load recordings')
+      setError(toUserFacingError(err, 'Failed to load recordings'))
     } finally {
       setLoading(false)
     }
@@ -38,7 +39,7 @@ export function ProcessRecordingPage() {
       setSuccess('Process note created.')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save recording')
+      setError(toUserFacingError(err, 'Failed to save recording'))
     }
   }
 

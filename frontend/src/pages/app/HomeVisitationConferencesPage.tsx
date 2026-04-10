@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchPreviousConferences, fetchUpcomingConferences, fetchVisitLogs } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { CaseConferenceItem, HomeVisitItem } from '../../types/adminOperations'
 
 export function HomeVisitationConferencesPage() {
@@ -29,7 +30,7 @@ export function HomeVisitationConferencesPage() {
           setError(null)
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load visitation/conference data')
+        if (!cancelled) setError(toUserFacingError(err, 'Failed to load visitation/conference data'))
       } finally {
         if (!cancelled) setLoading(false)
       }

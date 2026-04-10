@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { fetchDonorAnalytics } from '../../services/donorAnalyticsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { DonorAnalyticsData } from '../../types/impact'
 
 /** Formats a number as a compact USD string, e.g. "$3,400" or "$1.2k". */
@@ -212,8 +213,8 @@ export function AdminDonorAnalyticsPage() {
       try {
         const result = await fetchDonorAnalytics()
         setData(result)
-      } catch {
-        setError('Unable to load donor analytics right now.')
+      } catch (error) {
+        setError(toUserFacingError(error, 'Unable to load donor analytics right now.'))
       } finally {
         setLoading(false)
       }
