@@ -135,7 +135,25 @@ export async function fetchPreviousConferences(query: PagingQuery): Promise<Page
 
 // ─── Resident Management (CRUD: Create & Update) ────────────────────────────
 
-export async function createResident(payload: any): Promise<void> {
+export type CreateResidentCasePayload = {
+  safehouseId: string
+  caseCategoryId: number
+  caseSubcategoryId?: number | null
+  statusStateId: number
+  residentUserId?: string | null
+  openedAt?: string
+}
+
+export type UpdateResidentCasePayload = {
+  safehouseId: string
+  caseCategoryId: number
+  caseSubcategoryId?: number | null
+  statusStateId: number
+  residentUserId?: string | null
+  closedAt?: string | null
+}
+
+export async function createResident(payload: CreateResidentCasePayload): Promise<void> {
   const endpoint = '/api/admin/caseload/residents'
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
@@ -145,7 +163,7 @@ export async function createResident(payload: any): Promise<void> {
   await readJson<unknown>(response, endpoint, 'POST')
 }
 
-export async function updateResident(id: string, payload: any): Promise<void> {
+export async function updateResident(id: string, payload: UpdateResidentCasePayload): Promise<void> {
   const endpoint = `/api/admin/caseload/residents/${id}`
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'PUT',
