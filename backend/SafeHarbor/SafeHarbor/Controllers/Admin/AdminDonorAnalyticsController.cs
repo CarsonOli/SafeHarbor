@@ -11,7 +11,7 @@ namespace SafeHarbor.Controllers.Admin;
 /// </summary>
 [ApiController]
 [Route("api/admin/donor-analytics")]
-///[Authorize(Policy = PolicyNames.AdminOnly)]
+[Authorize(Policy = PolicyNames.AdminOnly)]
 public sealed class AdminDonorAnalyticsController(IDonorAnalyticsService donorAnalyticsService) : ControllerBase
 {
     [HttpGet]
