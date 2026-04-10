@@ -1,5 +1,6 @@
 import type { DonorAnalyticsData } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError, NOT_AUTHORIZED_MESSAGE } from './httpErrors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const ANALYTICS_ENDPOINT = '/api/admin/donor-analytics'
@@ -64,12 +65,21 @@ export async function fetchDonorAnalytics(): Promise<DonorAnalyticsData> {
     })
 
     if (!response.ok) {
+      if (response.status === 403) {
+        // Do not mask policy denials with fallback content; page should show explicit auth state.
+        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE)
+      }
+
       console.warn(`[donorAnalyticsApi] Analytics fetch returned ${response.status} — using fallback`)
       return FALLBACK_ANALYTICS
     }
 
     return (await response.json()) as DonorAnalyticsData
   } catch (err) {
+    if (err instanceof HttpError && err.status === 403) {
+      throw err
+    }
+
     console.warn('[donorAnalyticsApi] Analytics fetch failed — using fallback', err)
     return FALLBACK_ANALYTICS
   }

@@ -17,7 +17,28 @@ import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
+import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 import AdminContributionsPage from './pages/app/AdminContributionsPage';
+import type { AppRole } from './auth/authSession'
+
+export type AppNavRoute = {
+  to: string
+  label: string
+  roles?: AppRole[]
+}
+
+// Permission matrix is derived from backend controller policies so nav links remain
+// aligned with endpoints callers can actually invoke.
+export const appNavRoutes: AppNavRoute[] = [
+  { to: '/app/dashboard', label: 'Admin Dashboard', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/donors', label: 'Donors & Contributions', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/donor-analytics', label: 'Donor Analytics', roles: ['Admin'] },
+  { to: '/app/caseload', label: 'Caseload', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/contributions', label: 'Manage Contributions', roles: ['Admin'] },
+  { to: '/app/process-recording', label: 'Process Recording', roles: ['SocialWorker'] },
+  { to: '/app/visitation-conferences', label: 'Visitation & Conferences', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/reports', label: 'Reports', roles: ['Admin', 'SocialWorker'] },
+]
 
 export const appRoutes = [
   {
@@ -46,10 +67,18 @@ export const appRoutes = [
         element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
-          { path: 'donors', element: <AdminContributionsPage /> },
-          { path: 'donor-analytics', element: <AdminDonorAnalyticsPage /> },
+          { path: 'donors', element: <DonorsContributionsPage /> },
+          {
+            path: 'donor-analytics',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <AdminDonorAnalyticsPage /> }],
+          },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
-          { path: 'contributions', element: <AdminContributionsPage /> },
+          {
+            path: 'contributions',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <AdminContributionsPage /> }],
+          },
           {
             path: 'process-recording',
             element: <ProtectedRoute allowedRoles={['SocialWorker']} />,

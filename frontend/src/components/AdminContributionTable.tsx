@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../services/adminApi';
+import { toUserFacingError } from '../services/httpErrors';
 
 const AdminContributionTable = () => {
   const [contributions, setContributions] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -14,8 +16,9 @@ const AdminContributionTable = () => {
     try {
       const data = await adminApi.getContributions();
       setContributions(data);
+      setError(null);
     } catch (error) {
-      console.error("Failed to load contributions", error);
+      setError(toUserFacingError(error, 'Failed to load contributions.'));
     } finally {
       setLoading(false);
     }
@@ -51,6 +54,7 @@ const AdminContributionTable = () => {
   };
 
   if (loading) return <p>Loading contributions...</p>;
+  if (error) return <p role="alert">{error}</p>;
 
   return (
     <div className="admin-table-container">
