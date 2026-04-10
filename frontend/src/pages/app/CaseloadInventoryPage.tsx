@@ -4,6 +4,7 @@ import { toUserFacingError } from '../../services/httpErrors'
 import { ReadinessBadge } from '../../components/ReadinessBadge'
 import type { CaseloadLookupsResponse, ResidentCaseListItem } from '../../types/adminOperations'
 import { useAuth } from '../../auth/AuthContext'
+import { fetchResidentReadinessFlags, type ResidentReadinessFlag } from '../../services/mlInsightsApi'
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -33,7 +34,17 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Expanded detail row ──────────────────────────────────────────────────────
 
-function CaseDetail({ item, onDelete, isDeleting }: { item: ResidentCaseListItem; onDelete?: () => void; isDeleting?: boolean }) {
+function CaseDetail({
+  item,
+  onDelete,
+  isDeleting,
+  hasReadiness,
+}: {
+  item: ResidentCaseListItem
+  onDelete?: () => void
+  isDeleting?: boolean
+  hasReadiness: boolean
+}) {
   const shortId = item.id.split('-')[0].toUpperCase()
   return (
     <tr>
@@ -193,6 +204,7 @@ export function CaseloadInventoryPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const hasFilters = !!(search || statusStateId || categoryId || safehouseId)
+  const hasReadiness = readinessFlags.size > 0
 
   return (
     <section>
@@ -364,6 +376,7 @@ export function CaseloadInventoryPage() {
                     item={item}
                     onDelete={isAdmin ? () => void handleDelete(item.id) : undefined}
                     isDeleting={deletingId === item.id}
+                    hasReadiness={hasReadiness}
                   />
                 )}
               </>
