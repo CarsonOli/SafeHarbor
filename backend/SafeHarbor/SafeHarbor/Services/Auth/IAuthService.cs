@@ -7,6 +7,7 @@ public interface IAuthService
     Task<AuthRegisterResult> RegisterAsync(RegisterAuthRequest request, CancellationToken cancellationToken = default);
     Task<AuthAuthenticateResult> AuthenticateAsync(LoginAuthRequest request, CancellationToken cancellationToken = default);
     Task<AuthProfileResult?> LookupProfileByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<DomainProfileReconciliationResult> ReconcileDomainProfilesAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed record RegisterAuthRequest(string Email, string Role, string Password, string? FirstName = null, string? LastName = null);

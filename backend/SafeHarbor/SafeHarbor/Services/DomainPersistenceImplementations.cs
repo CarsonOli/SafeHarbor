@@ -355,7 +355,8 @@ public sealed class DonorDashboardService(
     IDonorRepository donorRepository,
     IContributionRepository contributionRepository,
     ICampaignRepository campaignRepository,
-    IDonorImpactCalculator impactCalculator) : IDonorDashboardService
+    IDonorImpactCalculator impactCalculator,
+    ILogger<DonorDashboardService> logger) : IDonorDashboardService
 {
     private const int CompletedContributionStatusId = 1;
     private const int OnlineDonationTypeId = 1;
@@ -408,11 +409,26 @@ public sealed class DonorDashboardService(
         {
             var donorById = await donorRepository.FindAsync(id, ct);
             if (donorById is not null) return donorById;
+
+            // NOTE: Log includes stable identifiers so operations can quickly backfill missing
+            // domain profiles through the auth-maintenance reconciliation endpoint.
+            logger.LogWarning(
+                "Donor dashboard identity mismatch: no donor profile for claim oid {DonorId}. Email claim: {Email}.",
+                id,
+                email ?? "<null>");
         }
 
         if (!string.IsNullOrWhiteSpace(email))
         {
-            return await donorRepository.FindByEmailAsync(email, ct);
+            var donorByEmail = await donorRepository.FindByEmailAsync(email, ct);
+            if (donorByEmail is not null)
+            {
+                return donorByEmail;
+            }
+
+            logger.LogWarning(
+                "Donor dashboard identity mismatch: no donor profile for email {Email}. Suggested action: run /api/admin/auth-maintenance/reconcile-domain-profiles.",
+                email);
         }
 
         return null;
