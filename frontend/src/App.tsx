@@ -4,6 +4,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
 import { appNavRoutes } from './config/appAccess'
+import { ThemeToggle } from './components/ThemeToggle'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
 const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
@@ -93,7 +94,9 @@ function App() {
               </div>
             </Link>
           </div>
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {/* ── THEME TOGGLE ADDED HERE ── */}
+            <ThemeToggle />
             {session ? (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})

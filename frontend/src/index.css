@@ -1,32 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;600;700&display=swap');
 
 :root {
-  /* Brand Colors - High-End Teal Palette */
-  --color-bg: #f4f8f9;           /* Ice blue/gray background */
+  /* Brand Colors - Light Mode (Existing) */
+  --color-bg: #f4f8f9;
   --color-surface: #ffffff;
   --color-text: #172535;
-  --color-subtle: #5a7684;       /* Muted blue-gray */
+  --color-subtle: #5a7684;
   --color-border: #cadce0;
-  --color-primary: #2a5c5c;      /* Deep SafeHarbor Teal */
+  --color-primary: #2a5c5c;
   --color-primary-contrast: #ffffff;
-  --color-secondary: #d9e8e8;    /* Soft teal wash */
+  --color-secondary: #d9e8e8;
   --color-danger: #b42318;
-  --color-accent: #e8704a;       /* Action Orange */
+  --color-accent: #e8704a;
   --color-accent-soft: #fff1ec;
   --color-muted-track: #e3eaee;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-8: 3rem;
-
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-
+  /* Standard Spacing & Radius (Keep these same) */
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
+  --space-4: 1rem; --space-5: 1.5rem; --space-6: 2rem; --space-8: 3rem;
+  --radius-sm: 0.375rem; --radius-md: 0.75rem; --radius-lg: 1rem;
   --font-sans: Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-serif: 'Playfair Display', Georgia, serif;
 }
@@ -42,10 +34,24 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   overflow-x: hidden; /* prevent full-bleed hero from causing horizontal scroll */
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* 2. DARK MODE OVERRIDES */
+.dark {
+  --color-bg: #0b141d;           /* Very deep navy/black */
+  --color-surface: #172535;      /* Your current text color becomes the card color */
+  --color-text: #f4f8f9;         /* Your current bg color becomes the text color */
+  --color-subtle: #94a3b8;
+  --color-border: #2d3e50;
+  --color-primary: #4e9a9a;      /* Lighter teal so it "pops" on dark */
+  --color-secondary: #1a3a3a;
+  --color-accent-soft: #2d1d18;  /* Muted orange background */
+  --color-muted-track: #1e293b;
 }
 
 .app-shell {

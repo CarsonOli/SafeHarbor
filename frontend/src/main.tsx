@@ -22,6 +22,21 @@ import AdminContributionsPage from './pages/app/AdminContributionsPage'
 import SocialMediaStrategy from './pages/SocialMediaStrategy'
 import { SocialMediaScorerPage } from './pages/app/SocialMediaScorerPage'
 
+// ── THEME INITIALIZATION ──────────────────────────────────────────────────
+// This runs before React boots to prevent the "white flash" on page load.
+// It checks the cookie and applies the .dark class to the <html> tag.
+const themeCookie = document.cookie
+  .split('; ')
+  .find((row) => row.startsWith('theme='))
+  ?.split('=')[1];
+
+if (themeCookie === 'dark') {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 export const appRoutes = [
   {
     path: '/',
