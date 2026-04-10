@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SafeHarbor.Auth;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
+using SafeHarbor.Services.Donations;
 
 namespace SafeHarbor.Services.Auth;
 
@@ -15,7 +16,8 @@ public sealed class AuthService(
     SafeHarborDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
     IOptions<PasswordPolicyOptions> passwordPolicyOptions,
-    IDomainProfileProvisioningService domainProfileProvisioningService) : IAuthService
+    IDomainProfileProvisioningService domainProfileProvisioningService,
+    IDonationAccessService donationAccessService) : IAuthService
 {
     private const string SelfRegisteredDatabaseRole = "user";
 
@@ -88,6 +90,13 @@ public sealed class AuthService(
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         dbContext.Users.Add(user);
+        // NOTE: user accounts stay auth-focused, but donor ownership lives in supporters.
+        // When a supporter profile exists (or can be created), link it via users.supporter_id.
+        user.SupporterId = await donationAccessService.EnsureSupporterForEmailAsync(
+            user.Email,
+            user.FirstName,
+            user.LastName,
+            cancellationToken);
         await domainProfileProvisioningService.EnsureProvisionedForUserAsync(
             user.UserId,
             user.Email,

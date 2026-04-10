@@ -50,6 +50,7 @@ namespace SafeHarbor.Data
                 entity.HasKey(u => u.UserId);
 
                 entity.Property(u => u.UserId).HasColumnName("user_id");
+                entity.Property(u => u.SupporterId).HasColumnName("supporter_id");
                 entity.Property(u => u.FirstName).HasColumnName("f_name");
                 entity.Property(u => u.LastName).HasColumnName("l_name");
                 entity.Property(u => u.Email).HasColumnName("email");
