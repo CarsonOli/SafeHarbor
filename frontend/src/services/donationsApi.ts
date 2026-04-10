@@ -44,9 +44,22 @@ export async function fetchAllDonations(filters: DonationFilters): Promise<Paged
 }
 
 export async function fetchCurrentUserDonations(): Promise<YourDonationsResponse> {
-  const endpoint = '/api/donor/donations'
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: buildAuthHeaders({ Accept: 'application/json' }),
-  })
-  return readJson<YourDonationsResponse>(response, endpoint)
+  const endpoints = ['/api/donor/donations', '/api/donor/your-donations', '/api/donor/dashboard/donations']
+  let lastError: unknown = null
+
+  for (const endpoint of endpoints) {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      headers: buildAuthHeaders({ Accept: 'application/json' }),
+    })
+
+    if (response.status === 404) {
+      // Compatibility: try legacy aliases if an environment has not yet deployed the primary route.
+      lastError = new HttpError(404, 'Not Found', { endpoint, method: 'GET' })
+      continue
+    }
+
+    return readJson<YourDonationsResponse>(response, endpoint)
+  }
+
+  throw (lastError ?? new HttpError(404, 'Unable to resolve donor donations endpoint', { method: 'GET' }))
 }

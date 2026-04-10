@@ -53,8 +53,7 @@ public sealed class DonationAccessService(
             return new YourDonationsResponse(false, null, null, []);
         }
 
-        var scopedFilters = new DonationFiltersQuery(null, null, null, null, null, null, null, 1, 100);
-        var query = BuildDonationQuery(NormalizeFilters(scopedFilters), user.SupporterId.Value);
+        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value);
         await using var conn = await OpenConnectionAsync(ct);
         var donations = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
 
@@ -488,6 +487,19 @@ public sealed class DonationAccessService(
     {
         var sql = BaseDonationProjection() + "\nWHERE d.donation_id = @donation_id\nORDER BY d.donation_date DESC, i.item_id";
         return (sql, new Dictionary<string, object> { ["donation_id"] = donationId });
+    }
+
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(long supporterId)
+    {
+        // The "Your Donations" page is an account ledger view, so it must return complete
+        // supporter history rather than paginated admin-style slices.
+        var sql = $$"""
+            {{BaseDonationProjection()}}
+            WHERE d.supporter_id = @supporter_id
+            ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC, i.item_id
+            """;
+
+        return (sql, new Dictionary<string, object> { ["supporter_id"] = supporterId });
     }
 
     private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(NormalizedDonationFilters filters, long? scopedSupporterId)

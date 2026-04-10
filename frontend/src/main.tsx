@@ -37,7 +37,10 @@ export const appRoutes = [
       {
         path: 'donor',
         element: <ProtectedRoute allowedRoles={['Donor']} />,
-        children: [{ path: 'dashboard', element: <YourDonationsPage /> }],
+        children: [
+          { path: 'dashboard', element: <YourDonationsPage /> },
+          { path: 'donations', element: <YourDonationsPage /> },
+        ],
       },
       // Donation UX decision:
       // /donate stays public so guests can complete the "continue as guest" flow,

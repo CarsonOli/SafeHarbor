@@ -104,6 +104,14 @@ describe('main routing guards', () => {
     blockedStaffView.cleanup()
   })
 
+  it('allows donors to access /donor/donations route alias', async () => {
+    mockSession = { email: 'alice@example.com', role: 'Donor' }
+    const donorView = await renderRoute('/donor/donations')
+
+    expect(donorView.container.textContent).toContain('your-donations-page')
+    donorView.cleanup()
+  })
+
   it('enforces nested SocialWorker-only route inside /app/process-recording', async () => {
     mockSession = { email: 'social.worker@safeharbor.org', role: 'SocialWorker' }
     const socialWorkerView = await renderRoute('/app/process-recording')

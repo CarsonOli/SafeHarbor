@@ -70,6 +70,17 @@ public sealed class DonorDashboardController(
 
     [HttpGet("donations")]
     public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonations(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    [HttpGet("your-donations")]
+    public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsLegacy(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    [HttpGet("dashboard/donations")]
+    public async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsDashboardScoped(CancellationToken ct)
+        => await GetCurrentUserDonationsCore(ct);
+
+    private async Task<ActionResult<YourDonationsResponse>> GetCurrentUserDonationsCore(CancellationToken ct)
     {
         var userId = ResolveUserId();
         if (userId is null)
