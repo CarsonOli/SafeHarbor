@@ -13,6 +13,10 @@ const REPORTS_ENDPOINT = import.meta.env.VITE_REPORTS_ANALYTICS_PATH ?? '/api/ad
 const SOCIAL_METRICS_ENDPOINT =
   import.meta.env.VITE_SOCIAL_POST_METRICS_PATH ?? '/api/admin/social-post-metrics'
 const ENABLE_DEV_FALLBACK = (import.meta.env.VITE_ENABLE_IMPACT_DEV_FALLBACK ?? 'false') === 'true'
+const STATIC_WEB_APP_FALLBACK_API_HOSTS = [
+  'https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net',
+  'https://safeharbor-api-staging.azurewebsites.net',
+]
 
 const fallbackImpactData: ImpactSummary = {
   generatedAt: '2026-04-01T00:00:00.000Z',
@@ -105,6 +109,25 @@ const fallbackReportsData: ReportsAnalyticsResponse = {
   ],
 }
 
+function resolveReportsApiBaseCandidates(): string[] {
+  if (API_BASE) {
+    return [API_BASE]
+  }
+
+  if (import.meta.env.DEV) {
+    // NOTE: Keep the Vite same-origin path first, then explicit local API host fallbacks.
+    // This avoids regressions for teams already using a local reverse proxy.
+    return ['', 'https://localhost:7217', 'http://localhost:5264', 'http://localhost:5000']
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')) {
+    // NOTE: Prefer explicit backend hosts first in SWA deployments where /api/* may not be proxied.
+    return [...STATIC_WEB_APP_FALLBACK_API_HOSTS, '']
+  }
+
+  return ['']
+}
+
 export async function fetchImpactSummary(): Promise<ImpactSummary> {
   try {
     // NOTE: The dashboard must remain read-only and aggregate-only.
@@ -149,25 +172,71 @@ export async function fetchImpactSummary(): Promise<ImpactSummary> {
 
 export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse> {
   try {
-    const response = await fetch(`${API_BASE}${REPORTS_ENDPOINT}`, {
-      method: 'GET',
-      headers: buildAuthHeaders({
-        Accept: 'application/json',
-      }),
-    })
+    const baseCandidates = resolveReportsApiBaseCandidates()
+    let hadNetworkFailure = false
 
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new HttpError(403, NOT_AUTHORIZED_MESSAGE, { method: 'GET', endpoint: REPORTS_ENDPOINT })
+    for (const baseUrl of baseCandidates) {
+      let response: Response
+
+      try {
+        response = await fetch(`${baseUrl}${REPORTS_ENDPOINT}`, {
+          method: 'GET',
+          headers: buildAuthHeaders({
+            Accept: 'application/json',
+          }),
+        })
+      } catch {
+        hadNetworkFailure = true
+        continue
       }
 
-      throw new HttpError(response.status, `Reports endpoint returned ${response.status}`, {
+      if (response.status === 404 && baseUrl === '' && import.meta.env.DEV && baseCandidates.length > 1) {
+        // In local Vite sessions, this usually means "/api" hit the frontend server.
+        // Continue to explicit backend host candidates before failing the request.
+        continue
+      }
+
+      if ((response.status === 404 || response.status === 405) && baseUrl === '' && !import.meta.env.DEV) {
+        if (baseCandidates.length > 1) {
+          continue
+        }
+
+        throw new HttpError(
+          response.status,
+          `Reports analytics endpoint ${REPORTS_ENDPOINT} is not reachable on this frontend origin (HTTP ${response.status}). ` +
+            'Set VITE_API_BASE_URL to the backend URL or configure frontend hosting to proxy /api/* to the API.',
+          {
+            method: 'GET',
+            endpoint: REPORTS_ENDPOINT,
+          },
+        )
+      }
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new HttpError(403, NOT_AUTHORIZED_MESSAGE, { method: 'GET', endpoint: REPORTS_ENDPOINT })
+        }
+
+        throw new HttpError(response.status, `Reports endpoint returned ${response.status}`, {
+          method: 'GET',
+          endpoint: REPORTS_ENDPOINT,
+        })
+      }
+
+      return (await response.json()) as ReportsAnalyticsResponse
+    }
+
+    if (hadNetworkFailure) {
+      throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
         method: 'GET',
         endpoint: REPORTS_ENDPOINT,
       })
     }
 
-    return (await response.json()) as ReportsAnalyticsResponse
+    throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
+      method: 'GET',
+      endpoint: REPORTS_ENDPOINT,
+    })
   } catch (error) {
     if (error instanceof HttpError && error.status === 403) {
       // Preserve explicit 403 semantics so staff/donor route mismatches are visible in UI.
