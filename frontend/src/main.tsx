@@ -17,7 +17,7 @@ import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
-import AdminContributionsPage from './pages/app/AdminContributionsPage';
+import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 
 export const appRoutes = [
   {
@@ -46,10 +46,10 @@ export const appRoutes = [
         element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
-          { path: 'donors', element: <AdminContributionsPage /> },
+          // Canonical donor-management route: /app/donors resolves to DonorsContributionsPage.
+          { path: 'donors', element: <DonorsContributionsPage /> },
           { path: 'donor-analytics', element: <AdminDonorAnalyticsPage /> },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
-          { path: 'contributions', element: <AdminContributionsPage /> },
           {
             path: 'process-recording',
             element: <ProtectedRoute allowedRoles={['SocialWorker']} />,
