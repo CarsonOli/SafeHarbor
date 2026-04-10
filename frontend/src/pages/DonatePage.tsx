@@ -517,7 +517,7 @@ export function DonatePage() {
             {errors.state && <p className="donate-field-error">{errors.state}</p>}
           </div>
 
-          <div style={{ flex: 2 }}>
+          <div style={{ flex: 1 }}>
             <label htmlFor="donate-zip">ZIP code</label>
             <input
               id="donate-zip"
