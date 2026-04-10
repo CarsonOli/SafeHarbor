@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;600;700&display=swap');
 
 :root {
   /* Brand Colors - High-End Teal Palette */
@@ -1222,5 +1222,106 @@ select {
   /* Ensure logo link stays aligned */
   .header-brand-group {
     gap: var(--space-2);
+  }
+}
+
+/* =============================================
+   STORIES SECTION — Handwritten Notebook Style
+   ============================================= */
+
+.stories-section {
+  background: #faf7f0;
+  padding: 5rem 0 6rem;
+  margin-top: var(--space-8);
+}
+
+.stories-heading {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  color: var(--color-text);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.stories-subheading {
+  font-family: 'Caveat', cursive;
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.stories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-6);
+  padding-top: var(--space-6);
+  align-items: start;
+}
+
+.notebook-card {
+  background: #fffef5;
+  border-radius: 2px;
+  padding: 2rem 2rem 2.5rem 3.75rem;
+  position: relative;
+  transform: rotate(var(--card-rotation, 0deg));
+  box-shadow: 3px 4px 18px rgba(0, 0, 0, 0.13), 1px 1px 0 #e8e0cc;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    #c8dada 27px,
+    #c8dada 28px
+  );
+  background-size: 100% 28px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.notebook-card:hover {
+  transform: rotate(0deg) translateY(-8px);
+  box-shadow: 6px 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.notebook-margin-line {
+  position: absolute;
+  left: 3rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(210, 65, 65, 0.35);
+  border-radius: 1px;
+}
+
+.notebook-role {
+  font-family: 'Caveat', cursive;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  display: block;
+  margin-bottom: 0.6rem;
+  line-height: 1.2;
+}
+
+.notebook-quote {
+  font-family: 'Caveat', cursive;
+  font-size: 1.3rem;
+  line-height: 1.85;
+  color: #2a2015;
+  margin: 0;
+  font-style: normal;
+}
+
+@media (max-width: 768px) {
+  .stories-grid {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .notebook-card {
+    transform: rotate(0deg) !important;
+  }
+
+  .notebook-card:hover {
+    transform: translateY(-6px) !important;
   }
 }

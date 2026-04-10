@@ -287,7 +287,7 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseCors();
 // Forwarded headers must run before HTTPS redirection so X-Forwarded-Proto is honored behind reverse proxies.
 app.UseForwardedHeaders();
-if (app.Environment.IsDevelopment()) 
+if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }

@@ -1,5 +1,23 @@
 import { Link } from 'react-router-dom'
 
+const stories = [
+  {
+    role: "Former Resident",
+    quote: "Safe Harbor gave me more than a place to stay — it gave me hope. When I arrived, I was hurting and afraid, but here I found safety, healing, and a chance to start over. Today, I believe my story can be different.",
+    rotation: "-2deg",
+  },
+  {
+    role: "Volunteer",
+    quote: "I came to Safe Harbor hoping to help, but I never expected how much it would change my own heart. In the small everyday moments, I've seen courage, healing, and joy return. It's a reminder that love and consistency really can change a life.",
+    rotation: "1.5deg",
+  },
+  {
+    role: "Donor",
+    quote: "When I chose to support Safe Harbor, I knew I wanted to help girls find safety and hope. What moved me most was seeing that every gift helps create real healing and real opportunity. Giving here feels like investing in a future that is truly worth fighting for.",
+    rotation: "-1deg",
+  },
+]
+
 const missionPoints = [
   {
     title: "Privacy First",
@@ -56,6 +74,27 @@ export function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* --- STORIES SECTION --- */}
+      <section className="stories-section" aria-labelledby="stories-title">
+        <div className="container">
+          <h2 className="stories-heading" id="stories-title">Stories from Our Community</h2>
+          <p className="stories-subheading">In their own words...</p>
+          <div className="stories-grid">
+            {stories.map((s) => (
+              <div
+                key={s.role}
+                className="notebook-card"
+                style={{ '--card-rotation': s.rotation } as React.CSSProperties}
+              >
+                <div className="notebook-margin-line" />
+                <span className="notebook-role">{s.role}</span>
+                <blockquote className="notebook-quote">"{s.quote}"</blockquote>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

@@ -2,12 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Models.Entities;
+using SafeHarbor.Models.Enums;
 
 namespace SafeHarbor.Services.Admin;
 
 public interface ICaseloadInventoryService
 {
     Task<PagedResult<ResidentCaseListItem>> GetResidentsAsync(PagingQuery query, CancellationToken ct);
+    Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct);
     Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct);
     Task<ResidentCaseListItem?> UpdateResidentCaseAsync(Guid id, UpdateResidentCaseRequest request, CancellationToken ct);
     Task<bool> DeleteResidentCaseAsync(Guid id, CancellationToken ct);
@@ -49,6 +51,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             .Include(x => x.Safehouse)
             .Include(x => x.CaseCategory)
             .Include(x => x.StatusState)
+            .Include(x => x.Resident)
             .AsQueryable();
 
         if (query.SafehouseId is { } safehouseId)
@@ -72,7 +75,8 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             q = q.Where(x =>
                 (x.Safehouse != null && x.Safehouse.Name.ToLower().Contains(search)) ||
                 (x.CaseCategory != null && x.CaseCategory.Name.ToLower().Contains(search)) ||
-                (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)));
+                (x.StatusState != null && x.StatusState.Name.ToLower().Contains(search)) ||
+                (x.Resident != null && x.Resident.FullName.ToLower().Contains(search)));
         }
 
         q = query.Desc ? q.OrderByDescending(x => x.OpenedAt) : q.OrderBy(x => x.OpenedAt);
@@ -92,11 +96,33 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.StatusStateId,
                 x.StatusState != null ? x.StatusState.Name : "Unknown",
                 x.CreatedBy,
+                x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
                 x.ClosedAt))
             .ToArrayAsync(ct);
 
         return new PagedResult<ResidentCaseListItem>(items, page, pageSize, total);
+    }
+
+    public async Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct)
+    {
+        var safehouses = await db.Safehouses.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadSafehouseItem(x.Id.ToString(), x.Name))
+            .ToArrayAsync(ct);
+
+        var categories = await db.CaseCategories.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+            .ToArrayAsync(ct);
+
+        var statuses = await db.StatusState.AsNoTracking()
+            .Where(x => x.Domain == StatusDomain.ResidentCase)
+            .OrderBy(x => x.Name)
+            .Select(x => new CaseloadLookupItem(x.Id, x.Name))
+            .ToArrayAsync(ct);
+
+        return new CaseloadLookupsResponse(safehouses, categories, statuses);
     }
 
     public async Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct)
@@ -161,6 +187,7 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
                 x.StatusStateId,
                 x.StatusState != null ? x.StatusState.Name : "Unknown",
                 x.CreatedBy,
+                x.Resident != null ? x.Resident.FullName : null,
                 x.OpenedAt,
                 x.ClosedAt))
             .FirstAsync(ct);
@@ -181,7 +208,11 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim().ToLower();
-            q = q.Where(x => x.Summary.ToLower().Contains(search));
+            q = q.Where(x =>
+                x.Summary.ToLower().Contains(search) ||
+                x.SocialWorker.ToLower().Contains(search) ||
+                x.EmotionalStateObserved.ToLower().Contains(search) ||
+                (x.InterventionsApplied != null && x.InterventionsApplied.ToLower().Contains(search)));
         }
 
         q = query.Desc ? q.OrderByDescending(x => x.RecordedAt) : q.OrderBy(x => x.RecordedAt);
@@ -192,7 +223,22 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
 
         var items = await q.Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new ProcessRecordItem(x.Id, x.ResidentCaseId, x.RecordedAt, x.Summary))
+            .Select(x => new ProcessRecordItem(
+                x.Id,
+                x.ResidentCaseId,
+                x.RecordedAt,
+                x.SocialWorker,
+                x.SessionType,
+                x.SessionDurationMinutes,
+                x.EmotionalStateObserved,
+                x.EmotionalStateEnd,
+                x.Summary,
+                x.InterventionsApplied,
+                x.FollowUpActions,
+                x.ProgressNoted,
+                x.ConcernsFlagged,
+                x.ReferralMade,
+                x.NotesRestricted != null && x.NotesRestricted != string.Empty))
             .ToArrayAsync(ct);
 
         return new PagedResult<ProcessRecordItem>(items, page, pageSize, total);
@@ -204,14 +250,31 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         {
             Id = Guid.NewGuid(),
             ResidentCaseId = request.ResidentCaseId,
+            RecordedAt = request.RecordedAt ?? DateTimeOffset.UtcNow,
+            SocialWorker = request.SocialWorker,
+            SessionType = request.SessionType,
+            SessionDurationMinutes = request.SessionDurationMinutes,
+            EmotionalStateObserved = request.EmotionalStateObserved,
+            EmotionalStateEnd = request.EmotionalStateEnd,
             Summary = request.Summary,
-            RecordedAt = request.RecordedAt ?? DateTimeOffset.UtcNow
+            InterventionsApplied = request.InterventionsApplied,
+            FollowUpActions = request.FollowUpActions,
+            ProgressNoted = request.ProgressNoted,
+            ConcernsFlagged = request.ConcernsFlagged,
+            ReferralMade = request.ReferralMade,
+            NotesRestricted = request.NotesRestricted
         };
 
         db.ProcessRecordings.Add(entity);
         await db.SaveChangesAsync(ct);
 
-        return new ProcessRecordItem(entity.Id, entity.ResidentCaseId, entity.RecordedAt, entity.Summary);
+        return new ProcessRecordItem(
+            entity.Id, entity.ResidentCaseId, entity.RecordedAt,
+            entity.SocialWorker, entity.SessionType, entity.SessionDurationMinutes,
+            entity.EmotionalStateObserved, entity.EmotionalStateEnd, entity.Summary,
+            entity.InterventionsApplied, entity.FollowUpActions,
+            entity.ProgressNoted, entity.ConcernsFlagged, entity.ReferralMade,
+            entity.NotesRestricted != null && entity.NotesRestricted != string.Empty);
     }
 
     public async Task<ProcessRecordItem?> UpdateAsync(Guid id, CreateProcessRecordRequest request, CancellationToken ct)
@@ -220,11 +283,28 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
         if (entity is null) return null;
 
         entity.ResidentCaseId = request.ResidentCaseId;
-        entity.Summary = request.Summary;
         entity.RecordedAt = request.RecordedAt ?? entity.RecordedAt;
+        entity.SocialWorker = request.SocialWorker;
+        entity.SessionType = request.SessionType;
+        entity.SessionDurationMinutes = request.SessionDurationMinutes;
+        entity.EmotionalStateObserved = request.EmotionalStateObserved;
+        entity.EmotionalStateEnd = request.EmotionalStateEnd;
+        entity.Summary = request.Summary;
+        entity.InterventionsApplied = request.InterventionsApplied;
+        entity.FollowUpActions = request.FollowUpActions;
+        entity.ProgressNoted = request.ProgressNoted;
+        entity.ConcernsFlagged = request.ConcernsFlagged;
+        entity.ReferralMade = request.ReferralMade;
+        entity.NotesRestricted = request.NotesRestricted;
 
         await db.SaveChangesAsync(ct);
-        return new ProcessRecordItem(entity.Id, entity.ResidentCaseId, entity.RecordedAt, entity.Summary);
+        return new ProcessRecordItem(
+            entity.Id, entity.ResidentCaseId, entity.RecordedAt,
+            entity.SocialWorker, entity.SessionType, entity.SessionDurationMinutes,
+            entity.EmotionalStateObserved, entity.EmotionalStateEnd, entity.Summary,
+            entity.InterventionsApplied, entity.FollowUpActions,
+            entity.ProgressNoted, entity.ConcernsFlagged, entity.ReferralMade,
+            entity.NotesRestricted != null && entity.NotesRestricted != string.Empty);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
