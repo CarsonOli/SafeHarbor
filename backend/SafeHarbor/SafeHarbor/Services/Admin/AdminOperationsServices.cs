@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Models.Entities;
@@ -53,6 +55,10 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
     {
         var page = query.NormalizedPage;
         var pageSize = query.NormalizedPageSize;
+        if (!await HasCanonicalCaseloadSchemaAsync(ct))
+        {
+            return await GetLegacyResidentsAsync(query, ct);
+        }
 
         try
         {
@@ -112,14 +118,19 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         }
         catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
         {
-            // NOTE: Caseload pages should still render in partially-migrated environments.
-            // Returning an empty page avoids hard 500s while operators reconcile schema drift.
-            return new PagedResult<ResidentCaseListItem>([], page, pageSize, 0);
+            // NOTE: Some production databases still run the pre-canonical schema (no resident_cases table).
+            // In that shape, we derive "case" rows from lighthouse.residents to keep caseload usable.
+            return await GetLegacyResidentsAsync(query, ct);
         }
     }
 
     public async Task<CaseloadLookupsResponse> GetLookupsAsync(CancellationToken ct)
     {
+        if (!await HasCanonicalCaseloadSchemaAsync(ct))
+        {
+            return await GetLegacyLookupsAsync(ct);
+        }
+
         try
         {
             var safehouses = await db.Safehouses.AsNoTracking()
@@ -142,9 +153,9 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         }
         catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
         {
-            // NOTE: Keep filters available as empty sets when lookup tables are missing,
-            // so frontend can show a controlled empty-state instead of crashing on 500.
-            return new CaseloadLookupsResponse([], [], []);
+            // NOTE: Legacy datasets store status/category directly on residents records.
+            // Build lookup options from those columns so filters still work before schema migration.
+            return await GetLegacyLookupsAsync(ct);
         }
     }
 
@@ -219,6 +230,342 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
 
     private static bool IsMissingCaseloadSchema(PostgresException ex) =>
         ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
+
+    private async Task<bool> HasCanonicalCaseloadSchemaAsync(CancellationToken ct)
+    {
+        return await RelationHasColumnsAsync("lighthouse", "resident_cases", ["id", "safehouse_id", "resident_id", "case_category_id", "status_state_id", "opened_at"], ct)
+            && await RelationHasColumnsAsync("lighthouse", "safehouses", ["id", "name"], ct)
+            && await RelationHasColumnsAsync("lighthouse", "case_category", ["id", "name"], ct)
+            && await RelationHasColumnsAsync("lighthouse", "status_state", ["id", "name", "domain"], ct);
+    }
+
+    private async Task<CaseloadLookupsResponse> GetLegacyLookupsAsync(CancellationToken ct)
+    {
+        var safehouseRows = await ExecuteReadAsync(
+            """
+            SELECT safehouse_id, COALESCE(NULLIF(TRIM(name), ''), CONCAT('Safehouse #', safehouse_id::text))
+            FROM lighthouse.safehouses
+            ORDER BY 2
+            """,
+            reader => new
+            {
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1)
+            },
+            ct);
+
+        var categories = await ExecuteReadAsync(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(case_category), ''), 'Uncategorized') AS value
+            FROM lighthouse.residents
+            ORDER BY 1
+            """,
+            reader => reader.GetString(0),
+            ct);
+
+        var statuses = await ExecuteReadAsync(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(case_status), ''), 'Unknown') AS value
+            FROM lighthouse.residents
+            ORDER BY 1
+            """,
+            reader => reader.GetString(0),
+            ct);
+
+        var safehouses = safehouseRows
+            .Select(x => new CaseloadSafehouseItem(
+                BuildDeterministicGuid("safehouse", x.Id.ToString(CultureInfo.InvariantCulture)).ToString(),
+                x.Name))
+            .ToArray();
+        var categoryLookups = BuildLegacyLookupItems(categories, "case-category");
+        var statusLookups = BuildLegacyLookupItems(statuses, "status");
+
+        return new CaseloadLookupsResponse(safehouses, categoryLookups, statusLookups);
+    }
+
+    private async Task<PagedResult<ResidentCaseListItem>> GetLegacyResidentsAsync(PagingQuery query, CancellationToken ct)
+    {
+        var categoryLookupById = BuildLegacyLookupMap(
+            await ExecuteReadAsync(
+                """
+                SELECT DISTINCT COALESCE(NULLIF(TRIM(case_category), ''), 'Uncategorized') AS value
+                FROM lighthouse.residents
+                ORDER BY 1
+                """,
+                reader => reader.GetString(0),
+                ct),
+            "case-category");
+
+        var statusLookupById = BuildLegacyLookupMap(
+            await ExecuteReadAsync(
+                """
+                SELECT DISTINCT COALESCE(NULLIF(TRIM(case_status), ''), 'Unknown') AS value
+                FROM lighthouse.residents
+                ORDER BY 1
+                """,
+                reader => reader.GetString(0),
+                ct),
+            "status");
+
+        if (query.StatusStateId is { } statusFilterId && !statusLookupById.TryGetValue(statusFilterId, out _))
+        {
+            return new PagedResult<ResidentCaseListItem>([], query.NormalizedPage, query.NormalizedPageSize, 0);
+        }
+
+        if (query.CategoryId is { } categoryFilterId && !categoryLookupById.TryGetValue(categoryFilterId, out _))
+        {
+            return new PagedResult<ResidentCaseListItem>([], query.NormalizedPage, query.NormalizedPageSize, 0);
+        }
+
+        var where = new List<string>();
+        var parameters = new Dictionary<string, object>();
+
+        if (query.SafehouseId is { } safehouseFilter)
+        {
+            var safehouseLookupRows = await ExecuteReadAsync(
+                """
+                SELECT safehouse_id
+                FROM lighthouse.safehouses
+                """,
+                reader => reader.GetInt32(0),
+                ct);
+
+            int? safehouseId = safehouseLookupRows
+                .Select(id => (int?)id)
+                .FirstOrDefault(id => id.HasValue && BuildDeterministicGuid("safehouse", id.Value.ToString(CultureInfo.InvariantCulture)) == safehouseFilter);
+            if (safehouseId is null)
+            {
+                return new PagedResult<ResidentCaseListItem>([], query.NormalizedPage, query.NormalizedPageSize, 0);
+            }
+
+            where.Add("r.safehouse_id = @safehouse_id");
+            parameters["safehouse_id"] = safehouseId.Value;
+        }
+
+        if (query.StatusStateId is { } statusId && statusLookupById.TryGetValue(statusId, out var statusName))
+        {
+            where.Add("COALESCE(NULLIF(TRIM(r.case_status), ''), 'Unknown') = @status");
+            parameters["status"] = statusName;
+        }
+
+        if (query.CategoryId is { } categoryId && categoryLookupById.TryGetValue(categoryId, out var categoryName))
+        {
+            where.Add("COALESCE(NULLIF(TRIM(r.case_category), ''), 'Uncategorized') = @category");
+            parameters["category"] = categoryName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            where.Add(
+                """
+                (
+                    COALESCE(NULLIF(TRIM(r.case_control_no), ''), NULLIF(TRIM(r.internal_code), ''), CONCAT('Resident #', r.resident_id::text)) ILIKE @search
+                    OR COALESCE(NULLIF(TRIM(s.name), ''), CONCAT('Safehouse #', COALESCE(r.safehouse_id, 0)::text)) ILIKE @search
+                    OR COALESCE(NULLIF(TRIM(r.case_category), ''), 'Uncategorized') ILIKE @search
+                    OR COALESCE(NULLIF(TRIM(r.case_status), ''), 'Unknown') ILIKE @search
+                )
+                """);
+            parameters["search"] = $"%{query.Search.Trim()}%";
+        }
+
+        var whereClause = where.Count > 0 ? $"WHERE {string.Join(" AND ", where)}" : string.Empty;
+
+        var total = await ExecuteScalarIntAsync(
+            $"""
+            SELECT COUNT(*)::int
+            FROM lighthouse.residents r
+            LEFT JOIN lighthouse.safehouses s ON s.safehouse_id = r.safehouse_id
+            {whereClause}
+            """,
+            ct,
+            parameters);
+
+        var pagingParameters = new Dictionary<string, object>(parameters)
+        {
+            ["limit"] = query.NormalizedPageSize,
+            ["offset"] = (query.NormalizedPage - 1) * query.NormalizedPageSize
+        };
+        var orderDirection = query.Desc ? "DESC" : "ASC";
+
+        var rows = await ExecuteReadAsync(
+            $"""
+            SELECT
+                r.resident_id,
+                r.safehouse_id,
+                COALESCE(NULLIF(TRIM(s.name), ''), CONCAT('Safehouse #', COALESCE(r.safehouse_id, 0)::text)) AS safehouse_name,
+                COALESCE(NULLIF(TRIM(r.case_category), ''), 'Uncategorized') AS category_name,
+                COALESCE(NULLIF(TRIM(r.case_status), ''), 'Unknown') AS status_name,
+                NULLIF(TRIM(r.assigned_social_worker), '') AS social_worker,
+                COALESCE(r.date_of_admission::timestamp, r.created_at, CURRENT_TIMESTAMP) AS opened_at,
+                r.date_closed::timestamp AS closed_at,
+                COALESCE(NULLIF(TRIM(r.case_control_no), ''), NULLIF(TRIM(r.internal_code), ''), CONCAT('Resident #', r.resident_id::text)) AS resident_name
+            FROM lighthouse.residents r
+            LEFT JOIN lighthouse.safehouses s ON s.safehouse_id = r.safehouse_id
+            {whereClause}
+            ORDER BY COALESCE(r.date_of_admission::timestamp, r.created_at, CURRENT_TIMESTAMP) {orderDirection}, r.resident_id {orderDirection}
+            LIMIT @limit OFFSET @offset
+            """,
+            reader => new
+            {
+                ResidentId = reader.GetInt32(0),
+                SafehouseId = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                SafehouseName = reader.GetString(2),
+                CategoryName = reader.GetString(3),
+                StatusName = reader.GetString(4),
+                SocialWorker = reader.IsDBNull(5) ? null : reader.GetString(5),
+                OpenedAt = reader.IsDBNull(6) ? DateTime.UtcNow : reader.GetDateTime(6),
+                ClosedAt = reader.IsDBNull(7) ? (DateTime?)null : reader.GetDateTime(7),
+                ResidentName = reader.GetString(8)
+            },
+            ct,
+            pagingParameters);
+
+        var items = rows.Select(row =>
+        {
+            var categoryId = BuildLegacyLookupId("case-category", row.CategoryName);
+            var statusId = BuildLegacyLookupId("status", row.StatusName);
+            var safehouseGuid = BuildDeterministicGuid("safehouse", row.SafehouseId.ToString(CultureInfo.InvariantCulture));
+            var residentGuid = BuildDeterministicGuid("resident", row.ResidentId.ToString(CultureInfo.InvariantCulture));
+            var caseGuid = BuildDeterministicGuid("resident-case", row.ResidentId.ToString(CultureInfo.InvariantCulture));
+            return new ResidentCaseListItem(
+                caseGuid,
+                safehouseGuid,
+                row.SafehouseName,
+                categoryId,
+                row.CategoryName,
+                statusId,
+                row.StatusName,
+                row.SocialWorker,
+                row.ResidentName,
+                new DateTimeOffset(DateTime.SpecifyKind(row.OpenedAt, DateTimeKind.Utc)),
+                row.ClosedAt is null ? null : new DateTimeOffset(DateTime.SpecifyKind(row.ClosedAt.Value, DateTimeKind.Utc)),
+                residentGuid);
+        }).ToArray();
+
+        return new PagedResult<ResidentCaseListItem>(items, query.NormalizedPage, query.NormalizedPageSize, total);
+    }
+
+    private static CaseloadLookupItem[] BuildLegacyLookupItems(IEnumerable<string> labels, string namespaceKey) =>
+        labels
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(label => new CaseloadLookupItem(BuildLegacyLookupId(namespaceKey, label), label))
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static IReadOnlyDictionary<int, string> BuildLegacyLookupMap(IEnumerable<string> labels, string namespaceKey) =>
+        BuildLegacyLookupItems(labels, namespaceKey).ToDictionary(x => x.Id, x => x.Name);
+
+    private static int BuildLegacyLookupId(string namespaceKey, string label)
+    {
+        var normalized = $"{namespaceKey}:{label.Trim().ToLowerInvariant()}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        var value = BitConverter.ToInt32(hash, 0) & int.MaxValue;
+        return value == 0 ? 1 : value;
+    }
+
+    private static Guid BuildDeterministicGuid(string namespaceKey, string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{namespaceKey}:{value}"));
+        Span<byte> guidBytes = stackalloc byte[16];
+        bytes.AsSpan(0, 16).CopyTo(guidBytes);
+        return new Guid(guidBytes);
+    }
+
+    private async Task<int> ExecuteScalarIntAsync(
+        string sql,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, object>? parameters = null)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return 0;
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        if (parameters is not null)
+        {
+            foreach (var (name, value) in parameters)
+            {
+                cmd.Parameters.AddWithValue(name, value);
+            }
+        }
+
+        var scalar = await cmd.ExecuteScalarAsync(ct);
+        return scalar switch
+        {
+            int intValue => intValue,
+            long longValue => (int)longValue,
+            decimal decimalValue => (int)decimalValue,
+            _ => 0
+        };
+    }
+
+    private async Task<T[]> ExecuteReadAsync<T>(
+        string sql,
+        Func<NpgsqlDataReader, T> map,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, object>? parameters = null)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return [];
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        if (parameters is not null)
+        {
+            foreach (var (name, value) in parameters)
+            {
+                cmd.Parameters.AddWithValue(name, value);
+            }
+        }
+
+        var rows = new List<T>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rows.Add(map(reader));
+        }
+
+        return [.. rows];
+    }
+
+    private async Task<bool> RelationHasColumnsAsync(
+        string schema,
+        string table,
+        IReadOnlyCollection<string> requiredColumns,
+        CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return false;
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT COUNT(*)::int
+            FROM information_schema.columns
+            WHERE table_schema = @schema
+              AND table_name = @table
+              AND column_name = ANY(@columns)
+            """,
+            conn);
+        cmd.Parameters.AddWithValue("schema", schema);
+        cmd.Parameters.AddWithValue("table", table);
+        cmd.Parameters.AddWithValue("columns", requiredColumns.ToArray());
+
+        var count = await cmd.ExecuteScalarAsync(ct);
+        return count is int intCount && intCount == requiredColumns.Count;
+    }
 }
 
 public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRecordingService

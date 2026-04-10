@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using System.Security.Cryptography;
+using System.Text;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Infrastructure;
@@ -10,8 +13,24 @@ namespace SafeHarbor.Services;
 
 public sealed class DbResidentRepository(SafeHarborDbContext db) : IResidentRepository
 {
-    public async Task<IReadOnlyList<Resident>> ListAsync(CancellationToken ct) =>
-        await db.Residents.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
+    public async Task<IReadOnlyList<Resident>> ListAsync(CancellationToken ct)
+    {
+        if (!await HasCanonicalResidentSchemaAsync(ct))
+        {
+            return await LoadLegacyResidentsAsync(ct);
+        }
+
+        try
+        {
+            return await db.Residents.AsNoTracking().OrderBy(x => x.CreatedAtUtc).ToListAsync(ct);
+        }
+        catch (PostgresException ex) when (IsMissingSchema(ex))
+        {
+            // NOTE: Legacy production datasets still use residents.resident_id + assigned_social_worker.
+            // We adapt those rows into the canonical Resident model so ML insights can still run.
+            return await LoadLegacyResidentsAsync(ct);
+        }
+    }
 
     public Task<Resident?> FindAsync(Guid id, CancellationToken ct) =>
         db.Residents.FirstOrDefaultAsync(x => x.Id == id, ct)!;
@@ -46,6 +65,104 @@ public sealed class DbResidentRepository(SafeHarborDbContext db) : IResidentRepo
         db.Residents.Remove(existing);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private async Task<IReadOnlyList<Resident>> LoadLegacyResidentsAsync(CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return [];
+        }
+
+        const string sql = """
+            SELECT
+                resident_id,
+                COALESCE(NULLIF(TRIM(case_control_no), ''), NULLIF(TRIM(internal_code), ''), CONCAT('Resident #', resident_id::text)) AS display_name,
+                date_of_birth,
+                COALESCE(NULLIF(TRIM(assigned_social_worker), ''), 'unknown@safeharbor.local') AS case_worker,
+                COALESCE(notes_restricted, '') AS notes,
+                COALESCE(created_at, CURRENT_TIMESTAMP) AS created_at_utc
+            FROM lighthouse.residents
+            ORDER BY COALESCE(created_at, CURRENT_TIMESTAMP), resident_id
+            """;
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var residents = new List<Resident>();
+        while (await reader.ReadAsync(ct))
+        {
+            var residentId = reader.GetInt32(0);
+            var createdAt = reader.IsDBNull(5)
+                ? DateTimeOffset.UtcNow
+                : new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc));
+
+            var dateOfBirth = reader.IsDBNull(2)
+                ? DateOnly.FromDateTime(DateTime.UtcNow.Date)
+                : DateOnly.FromDateTime(reader.GetDateTime(2));
+
+            residents.Add(new Resident
+            {
+                Id = BuildDeterministicGuid("resident", residentId.ToString()),
+                FullName = reader.GetString(1),
+                DateOfBirth = dateOfBirth,
+                CaseWorkerEmail = reader.GetString(3),
+                MedicalNotes = reader.GetString(4),
+                CreatedAtUtc = createdAt,
+                UpdatedAtUtc = createdAt
+            });
+        }
+
+        return residents;
+    }
+
+    private static Guid BuildDeterministicGuid(string namespaceKey, string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{namespaceKey}:{value}"));
+        Span<byte> guidBytes = stackalloc byte[16];
+        bytes.AsSpan(0, 16).CopyTo(guidBytes);
+        return new Guid(guidBytes);
+    }
+
+    private static bool IsMissingSchema(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn;
+
+    private async Task<bool> HasCanonicalResidentSchemaAsync(CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return false;
+        }
+
+        var requiredColumns = new[]
+        {
+            "id",
+            "full_name",
+            "date_of_birth",
+            "medical_notes",
+            "case_worker_email",
+            "created_at_utc",
+            "updated_at_utc"
+        };
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT COUNT(*)::int
+            FROM information_schema.columns
+            WHERE table_schema = 'lighthouse'
+              AND table_name = 'residents'
+              AND column_name = ANY(@columns)
+            """,
+            conn);
+        cmd.Parameters.AddWithValue("columns", requiredColumns);
+        var count = await cmd.ExecuteScalarAsync(ct);
+        return count is int intCount && intCount == requiredColumns.Length;
     }
 }
 
