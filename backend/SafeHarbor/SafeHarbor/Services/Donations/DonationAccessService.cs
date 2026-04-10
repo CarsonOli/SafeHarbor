@@ -11,6 +11,7 @@ public interface IDonationAccessService
     Task<PagedResult<DonationListItem>> GetAllDonationsAsync(DonationFiltersQuery filters, CancellationToken ct);
     Task<DonationListItem?> GetDonationByIdAsync(long donationId, CancellationToken ct);
     Task<YourDonationsResponse> GetCurrentUserDonationsAsync(Guid userId, CancellationToken ct);
+    Task<long?> CreateDonationForCurrentUserAsync(Guid userId, string? email, decimal amount, string? frequency, CancellationToken ct);
     Task<bool> LinkUserToSupporterAsync(Guid userId, long supporterId, CancellationToken ct);
     Task<long?> FindSupporterByEmailAsync(string email, CancellationToken ct);
     Task<long?> EnsureSupporterForEmailAsync(string email, string? firstName, string? lastName, CancellationToken ct);
@@ -57,6 +58,91 @@ public sealed class DonationAccessService(SafeHarborDbContext dbContext) : IDona
 
         var supporterDisplayName = donations.FirstOrDefault()?.DonorDisplayName;
         return new YourDonationsResponse(true, user.SupporterId, supporterDisplayName, donations);
+    }
+
+    public async Task<long?> CreateDonationForCurrentUserAsync(Guid userId, string? email, decimal amount, string? frequency, CancellationToken ct)
+    {
+        if (amount <= 0)
+        {
+            return null;
+        }
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var supporterId = user.SupporterId;
+        if (supporterId is null && !string.IsNullOrWhiteSpace(email))
+        {
+            supporterId = await EnsureSupporterForEmailAsync(email, user.FirstName, user.LastName, ct);
+            if (supporterId is not null)
+            {
+                user.SupporterId = supporterId;
+                user.UpdatedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(ct);
+            }
+        }
+
+        if (supporterId is null)
+        {
+            return null;
+        }
+
+        await using var conn = await OpenConnectionAsync(ct);
+        const string insertSql = """
+            WITH resolved_id AS (
+                SELECT CASE
+                    WHEN pg_get_serial_sequence('lighthouse.donations', 'donation_id') IS NOT NULL
+                        THEN nextval(pg_get_serial_sequence('lighthouse.donations', 'donation_id'))
+                    ELSE (
+                        SELECT COALESCE(MAX(donation_id), 0) + 1
+                        FROM lighthouse.donations
+                    )
+                END AS donation_id
+            )
+            INSERT INTO lighthouse.donations
+                (donation_id, supporter_id, donation_date, donation_type, amount, frequency, channel_source)
+            SELECT
+                resolved_id.donation_id,
+                @supporter_id,
+                @donation_date,
+                @donation_type,
+                @amount,
+                @frequency,
+                @channel_source
+            FROM resolved_id
+            RETURNING donation_id
+            """;
+
+        try
+        {
+            var donationId = await ExecuteScalarAsync<object?>(
+                conn,
+                insertSql,
+                new Dictionary<string, object>
+                {
+                    ["supporter_id"] = supporterId.Value,
+                    ["donation_date"] = DateTime.UtcNow,
+                    ["donation_type"] = "Cash",
+                    ["amount"] = amount,
+                    ["frequency"] = string.IsNullOrWhiteSpace(frequency) ? "One-time" : frequency.Trim(),
+                    ["channel_source"] = "Web",
+                },
+                ct);
+
+            return donationId is null || donationId is DBNull ? null : Convert.ToInt64(donationId);
+        }
+        catch (PostgresException ex) when (
+            ex.SqlState == PostgresErrorCodes.UndefinedTable ||
+            ex.SqlState == PostgresErrorCodes.UndefinedColumn ||
+            ex.SqlState == PostgresErrorCodes.NotNullViolation)
+        {
+            // NOTE: Keep donation submission non-fatal in environments with divergent
+            // donation schemas; caller can decide whether to fall back to legacy flow.
+            return null;
+        }
     }
 
     public async Task<bool> LinkUserToSupporterAsync(Guid userId, long supporterId, CancellationToken ct)
