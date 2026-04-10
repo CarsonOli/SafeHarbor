@@ -26,20 +26,20 @@ public sealed record CaseloadLookupsResponse(
     IReadOnlyCollection<CaseloadLookupItem> StatusStates);
 
 public sealed record DonorListItem(Guid Id, string Name, string Email, DateTimeOffset LastActivityAt, decimal LifetimeContributions);
-public sealed record CreateDonorRequest([property: Required, StringLength(120, MinimumLength = 2)] string Name, [property: Required, EmailAddress] string Email);
+public sealed record CreateDonorRequest([param: Required, StringLength(120, MinimumLength = 2)] string Name, [param: Required, EmailAddress] string Email);
 
 public sealed record CreateContributionRequest(
-    [property: Required] Guid DonorId,
-    [property: Range(typeof(decimal), "0.01", "1000000000")] decimal Amount,
-    [property: Required] int ContributionTypeId,
-    [property: Required] int StatusStateId,
+    [param: Required] Guid DonorId,
+    [param: Range(typeof(decimal), "0.01", "1000000000")] decimal Amount,
+    [param: Required] int ContributionTypeId,
+    [param: Required] int StatusStateId,
     DateTimeOffset? ContributionDate,
     Guid? CampaignId);
 
 public sealed record CreateAllocationRequest(
-    [property: Required] Guid ContributionId,
-    [property: Required] Guid SafehouseId,
-    [property: Range(typeof(decimal), "0.01", "1000000000")] decimal AmountAllocated);
+    [param: Required] Guid ContributionId,
+    [param: Required] Guid SafehouseId,
+    [param: Range(typeof(decimal), "0.01", "1000000000")] decimal AmountAllocated);
 
 public sealed record ResidentCaseListItem(
     Guid Id,
@@ -56,18 +56,18 @@ public sealed record ResidentCaseListItem(
     Guid? ResidentEntityId = null);
 
 public sealed record CreateResidentCaseRequest(
-    [property: Required] Guid SafehouseId,
-    [property: Required] int CaseCategoryId,
+    [param: Required] Guid SafehouseId,
+    [param: Required] int CaseCategoryId,
     int? CaseSubcategoryId,
-    [property: Required] int StatusStateId,
+    [param: Required] int StatusStateId,
     Guid? ResidentUserId,
     DateTimeOffset? OpenedAt);
 
 public sealed record UpdateResidentCaseRequest(
-    [property: Required] Guid SafehouseId,
-    [property: Required] int CaseCategoryId,
+    [param: Required] Guid SafehouseId,
+    [param: Required] int CaseCategoryId,
     int? CaseSubcategoryId,
-    [property: Required] int StatusStateId,
+    [param: Required] int StatusStateId,
     Guid? ResidentUserId,
     DateTimeOffset? ClosedAt);
 
@@ -89,13 +89,13 @@ public sealed record ProcessRecordItem(
     bool NotesRestricted);
 
 public sealed record CreateProcessRecordRequest(
-    [property: Required] Guid ResidentCaseId,
-    [property: Required, StringLength(120, MinimumLength = 2)] string SocialWorker,
-    [property: Required] string SessionType,
+    [param: Required] Guid ResidentCaseId,
+    [param: Required, StringLength(120, MinimumLength = 2)] string SocialWorker,
+    [param: Required] string SessionType,
     int? SessionDurationMinutes,
-    [property: Required, StringLength(60, MinimumLength = 2)] string EmotionalStateObserved,
+    [param: Required, StringLength(60, MinimumLength = 2)] string EmotionalStateObserved,
     string? EmotionalStateEnd,
-    [property: Required, StringLength(8000, MinimumLength = 3)] string Summary,
+    [param: Required, StringLength(8000, MinimumLength = 3)] string Summary,
     string? InterventionsApplied,
     string? FollowUpActions,
     bool ProgressNoted,
@@ -118,10 +118,10 @@ public sealed record HomeVisitItem(
 public sealed record CaseConferenceItem(Guid Id, Guid ResidentCaseId, DateTimeOffset ConferenceDate, string Status, string OutcomeSummary);
 
 public sealed record CreateHomeVisitRequest(
-    [property: Required] Guid ResidentCaseId,
-    [property: Required] int VisitTypeId,
-    [property: Required] int StatusStateId,
-    [property: Required] DateTimeOffset VisitDate,
+    [param: Required] Guid ResidentCaseId,
+    [param: Required] int VisitTypeId,
+    [param: Required] int StatusStateId,
+    [param: Required] DateTimeOffset VisitDate,
     string? HomeEnvironmentObservations,
     string? FamilyCooperationLevel,
     bool SafetyConcernsIdentified,
@@ -129,9 +129,9 @@ public sealed record CreateHomeVisitRequest(
     string? Notes);
 
 public sealed record CreateCaseConferenceRequest(
-    [property: Required] Guid ResidentCaseId,
-    [property: Required] int StatusStateId,
-    [property: Required] DateTimeOffset ConferenceDate,
+    [param: Required] Guid ResidentCaseId,
+    [param: Required] int StatusStateId,
+    [param: Required] DateTimeOffset ConferenceDate,
     string OutcomeSummary);
 
 public sealed record DonationTrendPoint(string Month, decimal Amount);
@@ -164,13 +164,13 @@ public sealed record SocialPostMetricListItem(
 
 public sealed record CreateSocialPostMetricRequest(
     Guid? CampaignId,
-    [property: Required] DateTimeOffset PostedAt,
-    [property: Required, StringLength(80, MinimumLength = 2)] string Platform,
-    [property: Required, StringLength(80, MinimumLength = 2)] string ContentType,
-    [property: Range(0, int.MaxValue)] int Reach,
-    [property: Range(0, int.MaxValue)] int Engagements,
-    [property: Range(typeof(decimal), "0", "1000000000")] decimal? AttributedDonationAmount,
-    [property: Range(0, int.MaxValue)] int? AttributedDonationCount);
+    [param: Required] DateTimeOffset PostedAt,
+    [param: Required, StringLength(80, MinimumLength = 2)] string Platform,
+    [param: Required, StringLength(80, MinimumLength = 2)] string ContentType,
+    [param: Range(0, int.MaxValue)] int Reach,
+    [param: Range(0, int.MaxValue)] int Engagements,
+    [param: Range(typeof(decimal), "0", "1000000000")] decimal? AttributedDonationAmount,
+    [param: Range(0, int.MaxValue)] int? AttributedDonationCount);
 
 public sealed record SocialDonationCorrelationPoint(
     string Group,

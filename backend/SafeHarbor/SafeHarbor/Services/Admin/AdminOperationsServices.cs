@@ -161,57 +161,94 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
 
     public async Task<ResidentCaseListItem> CreateResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct)
     {
-        var entity = new ResidentCase
+        if (!await HasCanonicalCaseloadSchemaAsync(ct))
         {
-            Id = Guid.NewGuid(),
-            SafehouseId = request.SafehouseId,
-            CaseCategoryId = request.CaseCategoryId,
-            CaseSubcategoryId = request.CaseSubcategoryId,
-            StatusStateId = request.StatusStateId,
-            ResidentId = request.ResidentUserId,
-            OpenedAt = request.OpenedAt ?? DateTimeOffset.UtcNow
-        };
+            return await CreateLegacyResidentCaseAsync(request, ct);
+        }
 
-        db.ResidentCases.Add(entity);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            var entity = new ResidentCase
+            {
+                Id = Guid.NewGuid(),
+                SafehouseId = request.SafehouseId,
+                CaseCategoryId = request.CaseCategoryId,
+                CaseSubcategoryId = request.CaseSubcategoryId,
+                StatusStateId = request.StatusStateId,
+                ResidentId = request.ResidentUserId,
+                OpenedAt = request.OpenedAt ?? DateTimeOffset.UtcNow
+            };
 
-        return await GetByIdAsync(entity.Id, ct);
+            db.ResidentCases.Add(entity);
+            await db.SaveChangesAsync(ct);
+
+            return await GetByIdAsync(entity.Id, ct);
+        }
+        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
+        {
+            // NOTE: Support environments that still persist caseload values directly on lighthouse.residents.
+            return await CreateLegacyResidentCaseAsync(request, ct);
+        }
     }
 
     public async Task<ResidentCaseListItem?> UpdateResidentCaseAsync(Guid id, UpdateResidentCaseRequest request, CancellationToken ct)
     {
-        var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (entity is null) return null;
+        if (!await HasCanonicalCaseloadSchemaAsync(ct))
+        {
+            return await UpdateLegacyResidentCaseAsync(id, request, ct);
+        }
 
-        entity.SafehouseId = request.SafehouseId;
-        entity.CaseCategoryId = request.CaseCategoryId;
-        entity.CaseSubcategoryId = request.CaseSubcategoryId;
-        entity.StatusStateId = request.StatusStateId;
-        entity.ResidentId = request.ResidentUserId;
-        entity.ClosedAt = request.ClosedAt;
+        try
+        {
+            var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (entity is null) return null;
 
-        await db.SaveChangesAsync(ct);
+            entity.SafehouseId = request.SafehouseId;
+            entity.CaseCategoryId = request.CaseCategoryId;
+            entity.CaseSubcategoryId = request.CaseSubcategoryId;
+            entity.StatusStateId = request.StatusStateId;
+            entity.ResidentId = request.ResidentUserId;
+            entity.ClosedAt = request.ClosedAt;
 
-        return await GetByIdAsync(entity.Id, ct);
+            await db.SaveChangesAsync(ct);
+
+            return await GetByIdAsync(entity.Id, ct);
+        }
+        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
+        {
+            return await UpdateLegacyResidentCaseAsync(id, request, ct);
+        }
     }
 
     public async Task<bool> DeleteResidentCaseAsync(Guid id, CancellationToken ct)
     {
-        var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (entity is null) return false;
+        if (!await HasCanonicalCaseloadSchemaAsync(ct))
+        {
+            return await DeleteLegacyResidentCaseAsync(id, ct);
+        }
 
-        // NOTE: Some deployed databases have FK constraints without cascade behavior for
-        // resident_case_id links. We clear known dependents explicitly so delete remains
-        // stable across migration drift and avoids surfacing a 500 to the client.
-        await db.ResidentAssessments.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-        await db.ProcessRecordings.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-        await db.HomeVisits.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-        await db.CaseConferences.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
-        await db.InterventionPlans.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+        try
+        {
+            var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (entity is null) return false;
 
-        db.ResidentCases.Remove(entity);
-        await db.SaveChangesAsync(ct);
-        return true;
+            // NOTE: Some deployed databases have FK constraints without cascade behavior for
+            // resident_case_id links. We clear known dependents explicitly so delete remains
+            // stable across migration drift and avoids surfacing a 500 to the client.
+            await db.ResidentAssessments.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+            await db.ProcessRecordings.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+            await db.HomeVisits.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+            await db.CaseConferences.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+            await db.InterventionPlans.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+
+            db.ResidentCases.Remove(entity);
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (PostgresException ex) when (IsMissingCaseloadSchema(ex))
+        {
+            return await DeleteLegacyResidentCaseAsync(id, ct);
+        }
     }
 
     private async Task<ResidentCaseListItem> GetByIdAsync(Guid id, CancellationToken ct)
@@ -454,6 +491,232 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         return new PagedResult<ResidentCaseListItem>(items, query.NormalizedPage, query.NormalizedPageSize, total);
     }
 
+    private async Task<ResidentCaseListItem> CreateLegacyResidentCaseAsync(CreateResidentCaseRequest request, CancellationToken ct)
+    {
+        var safehouseId = await ResolveLegacySafehouseIdAsync(request.SafehouseId, ct)
+            ?? await ResolveDefaultLegacySafehouseIdAsync(ct)
+            ?? 0;
+        var categoryName = await ResolveLegacyCategoryNameAsync(request.CaseCategoryId, ct) ?? "Uncategorized";
+        var statusName = await ResolveLegacyStatusNameAsync(request.StatusStateId, ct) ?? "Unknown";
+        var openedAt = (request.OpenedAt ?? DateTimeOffset.UtcNow).UtcDateTime;
+        var createdAt = DateTime.UtcNow;
+        var internalCode = $"AUTO-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+        var row = await ExecuteReadAsync(
+            """
+            INSERT INTO lighthouse.residents (
+                safehouse_id,
+                case_category,
+                case_status,
+                date_of_admission,
+                created_at,
+                internal_code,
+                assigned_social_worker
+            )
+            VALUES (
+                @safehouse_id,
+                @case_category,
+                @case_status,
+                @date_of_admission,
+                @created_at,
+                @internal_code,
+                @assigned_social_worker
+            )
+            RETURNING resident_id
+            """,
+            reader => reader.GetInt32(0),
+            ct,
+            new Dictionary<string, object>
+            {
+                ["safehouse_id"] = safehouseId,
+                ["case_category"] = categoryName,
+                ["case_status"] = statusName,
+                ["date_of_admission"] = openedAt,
+                ["created_at"] = createdAt,
+                ["internal_code"] = internalCode,
+                ["assigned_social_worker"] = "system"
+            });
+
+        var residentId = row.First();
+        return await GetLegacyResidentCaseByResidentIdAsync(residentId, ct)
+            ?? throw new InvalidOperationException("Failed to load newly created legacy resident case.");
+    }
+
+    private async Task<ResidentCaseListItem?> UpdateLegacyResidentCaseAsync(Guid id, UpdateResidentCaseRequest request, CancellationToken ct)
+    {
+        var residentId = await ResolveLegacyResidentIdFromCaseGuidAsync(id, ct);
+        if (residentId is null)
+        {
+            return null;
+        }
+
+        var safehouseId = await ResolveLegacySafehouseIdAsync(request.SafehouseId, ct)
+            ?? await ResolveDefaultLegacySafehouseIdAsync(ct)
+            ?? 0;
+        var categoryName = await ResolveLegacyCategoryNameAsync(request.CaseCategoryId, ct) ?? "Uncategorized";
+        var statusName = await ResolveLegacyStatusNameAsync(request.StatusStateId, ct) ?? "Unknown";
+        var closedAt = request.ClosedAt?.UtcDateTime;
+
+        await ExecuteNonQueryAsync(
+            """
+            UPDATE lighthouse.residents
+            SET
+                safehouse_id = @safehouse_id,
+                case_category = @case_category,
+                case_status = @case_status,
+                date_closed = @date_closed
+            WHERE resident_id = @resident_id
+            """,
+            ct,
+            new Dictionary<string, object?>
+            {
+                ["safehouse_id"] = safehouseId,
+                ["case_category"] = categoryName,
+                ["case_status"] = statusName,
+                ["date_closed"] = closedAt,
+                ["resident_id"] = residentId.Value
+            });
+
+        return await GetLegacyResidentCaseByResidentIdAsync(residentId.Value, ct);
+    }
+
+    private async Task<bool> DeleteLegacyResidentCaseAsync(Guid id, CancellationToken ct)
+    {
+        var residentId = await ResolveLegacyResidentIdFromCaseGuidAsync(id, ct);
+        if (residentId is null)
+        {
+            return false;
+        }
+
+        // NOTE: Legacy tables use resident_id FK references, so we clear dependent records first.
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.process_recordings WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.home_visitations WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.intervention_plans WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.health_wellbeing_records WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.incident_reports WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.resident_partners WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        await ExecuteNonQueryAsync("DELETE FROM lighthouse.residents WHERE resident_id = @resident_id", ct, new Dictionary<string, object?> { ["resident_id"] = residentId.Value });
+        return true;
+    }
+
+    private async Task<ResidentCaseListItem?> GetLegacyResidentCaseByResidentIdAsync(int residentId, CancellationToken ct)
+    {
+        var rows = await ExecuteReadAsync(
+            """
+            SELECT
+                r.resident_id,
+                r.safehouse_id,
+                COALESCE(NULLIF(TRIM(s.name), ''), CONCAT('Safehouse #', COALESCE(r.safehouse_id, 0)::text)) AS safehouse_name,
+                COALESCE(NULLIF(TRIM(r.case_category), ''), 'Uncategorized') AS category_name,
+                COALESCE(NULLIF(TRIM(r.case_status), ''), 'Unknown') AS status_name,
+                NULLIF(TRIM(r.assigned_social_worker), '') AS social_worker,
+                COALESCE(r.date_of_admission::timestamp, r.created_at, CURRENT_TIMESTAMP) AS opened_at,
+                r.date_closed::timestamp AS closed_at,
+                COALESCE(NULLIF(TRIM(r.case_control_no), ''), NULLIF(TRIM(r.internal_code), ''), CONCAT('Resident #', r.resident_id::text)) AS resident_name
+            FROM lighthouse.residents r
+            LEFT JOIN lighthouse.safehouses s ON s.safehouse_id = r.safehouse_id
+            WHERE r.resident_id = @resident_id
+            """,
+            reader => new
+            {
+                ResidentId = reader.GetInt32(0),
+                SafehouseId = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                SafehouseName = reader.GetString(2),
+                CategoryName = reader.GetString(3),
+                StatusName = reader.GetString(4),
+                SocialWorker = reader.IsDBNull(5) ? null : reader.GetString(5),
+                OpenedAt = reader.IsDBNull(6) ? DateTime.UtcNow : reader.GetDateTime(6),
+                ClosedAt = reader.IsDBNull(7) ? (DateTime?)null : reader.GetDateTime(7),
+                ResidentName = reader.GetString(8),
+            },
+            ct,
+            new Dictionary<string, object> { ["resident_id"] = residentId });
+
+        var row = rows.FirstOrDefault();
+        if (row is null)
+        {
+            return null;
+        }
+
+        var categoryId = BuildLegacyLookupId("case-category", row.CategoryName);
+        var statusId = BuildLegacyLookupId("status", row.StatusName);
+        var safehouseGuid = BuildDeterministicGuid("safehouse", row.SafehouseId.ToString(CultureInfo.InvariantCulture));
+        var residentGuid = BuildDeterministicGuid("resident", row.ResidentId.ToString(CultureInfo.InvariantCulture));
+        var caseGuid = BuildDeterministicGuid("resident-case", row.ResidentId.ToString(CultureInfo.InvariantCulture));
+        return new ResidentCaseListItem(
+            caseGuid,
+            safehouseGuid,
+            row.SafehouseName,
+            categoryId,
+            row.CategoryName,
+            statusId,
+            row.StatusName,
+            row.SocialWorker,
+            row.ResidentName,
+            new DateTimeOffset(DateTime.SpecifyKind(row.OpenedAt, DateTimeKind.Utc)),
+            row.ClosedAt is null ? null : new DateTimeOffset(DateTime.SpecifyKind(row.ClosedAt.Value, DateTimeKind.Utc)),
+            residentGuid);
+    }
+
+    private async Task<int?> ResolveLegacyResidentIdFromCaseGuidAsync(Guid caseId, CancellationToken ct)
+    {
+        var residentIds = await ExecuteReadAsync(
+            "SELECT resident_id FROM lighthouse.residents",
+            reader => reader.GetInt32(0),
+            ct);
+        return residentIds
+            .Select(id => (int?)id)
+            .FirstOrDefault(id => id.HasValue && BuildDeterministicGuid("resident-case", id.Value.ToString(CultureInfo.InvariantCulture)) == caseId);
+    }
+
+    private async Task<int?> ResolveLegacySafehouseIdAsync(Guid safehouseGuid, CancellationToken ct)
+    {
+        var safehouseIds = await ExecuteReadAsync(
+            "SELECT safehouse_id FROM lighthouse.safehouses",
+            reader => reader.GetInt32(0),
+            ct);
+        return safehouseIds
+            .Select(id => (int?)id)
+            .FirstOrDefault(id => id.HasValue && BuildDeterministicGuid("safehouse", id.Value.ToString(CultureInfo.InvariantCulture)) == safehouseGuid);
+    }
+
+    private async Task<int?> ResolveDefaultLegacySafehouseIdAsync(CancellationToken ct)
+    {
+        var safehouseIds = await ExecuteReadAsync(
+            "SELECT safehouse_id FROM lighthouse.safehouses ORDER BY safehouse_id LIMIT 1",
+            reader => reader.GetInt32(0),
+            ct);
+        return safehouseIds.Select(id => (int?)id).FirstOrDefault();
+    }
+
+    private async Task<string?> ResolveLegacyCategoryNameAsync(int categoryId, CancellationToken ct)
+    {
+        var categories = await ExecuteReadAsync(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(case_category), ''), 'Uncategorized') AS value
+            FROM lighthouse.residents
+            ORDER BY 1
+            """,
+            reader => reader.GetString(0),
+            ct);
+        var map = BuildLegacyLookupMap(categories, "case-category");
+        return map.TryGetValue(categoryId, out var name) ? name : null;
+    }
+
+    private async Task<string?> ResolveLegacyStatusNameAsync(int statusId, CancellationToken ct)
+    {
+        var statuses = await ExecuteReadAsync(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(case_status), ''), 'Unknown') AS value
+            FROM lighthouse.residents
+            ORDER BY 1
+            """,
+            reader => reader.GetString(0),
+            ct);
+        var map = BuildLegacyLookupMap(statuses, "status");
+        return map.TryGetValue(statusId, out var name) ? name : null;
+    }
+
     private static CaseloadLookupItem[] BuildLegacyLookupItems(IEnumerable<string> labels, string namespaceKey) =>
         labels
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -510,6 +773,31 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
             decimal decimalValue => (int)decimalValue,
             _ => 0
         };
+    }
+
+    private async Task<int> ExecuteNonQueryAsync(
+        string sql,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, object?>? parameters = null)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return 0;
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        if (parameters is not null)
+        {
+            foreach (var (name, value) in parameters)
+            {
+                cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+            }
+        }
+
+        return await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private async Task<T[]> ExecuteReadAsync<T>(
@@ -581,50 +869,60 @@ public sealed class ProcessRecordingService(SafeHarborDbContext db) : IProcessRe
 {
     public async Task<PagedResult<ProcessRecordItem>> GetAsync(PagingQuery query, CancellationToken ct)
     {
-        var q = db.ProcessRecordings.AsNoTracking().AsQueryable();
-
-        if (query.ResidentCaseId is { } residentCaseId)
+        try
         {
-            q = q.Where(x => x.ResidentCaseId == residentCaseId);
-        }
+            var q = db.ProcessRecordings.AsNoTracking().AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(query.Search))
+            if (query.ResidentCaseId is { } residentCaseId)
+            {
+                q = q.Where(x => x.ResidentCaseId == residentCaseId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                var search = query.Search.Trim().ToLower();
+                q = q.Where(x =>
+                    x.Summary.ToLower().Contains(search) ||
+                    x.SocialWorker.ToLower().Contains(search) ||
+                    x.EmotionalStateObserved.ToLower().Contains(search) ||
+                    (x.InterventionsApplied != null && x.InterventionsApplied.ToLower().Contains(search)));
+            }
+
+            q = query.Desc ? q.OrderByDescending(x => x.RecordedAt) : q.OrderBy(x => x.RecordedAt);
+
+            var total = await q.CountAsync(ct);
+            var page = query.NormalizedPage;
+            var pageSize = query.NormalizedPageSize;
+
+            var items = await q.Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ProcessRecordItem(
+                    x.Id,
+                    x.ResidentCaseId,
+                    x.RecordedAt,
+                    x.SocialWorker,
+                    x.SessionType,
+                    x.SessionDurationMinutes,
+                    x.EmotionalStateObserved,
+                    x.EmotionalStateEnd,
+                    x.Summary,
+                    x.InterventionsApplied,
+                    x.FollowUpActions,
+                    x.ProgressNoted,
+                    x.ConcernsFlagged,
+                    x.ReferralMade,
+                    x.NotesRestricted != null && x.NotesRestricted != string.Empty))
+                .ToArrayAsync(ct);
+
+            return new PagedResult<ProcessRecordItem>(items, page, pageSize, total);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn)
         {
-            var search = query.Search.Trim().ToLower();
-            q = q.Where(x =>
-                x.Summary.ToLower().Contains(search) ||
-                x.SocialWorker.ToLower().Contains(search) ||
-                x.EmotionalStateObserved.ToLower().Contains(search) ||
-                (x.InterventionsApplied != null && x.InterventionsApplied.ToLower().Contains(search)));
+            // NOTE: Some deployed datasets still expose legacy process_recordings columns
+            // (for example ProcessRecordingId instead of id). Return an empty page instead
+            // of surfacing a 500 while migrations are reconciled.
+            return new PagedResult<ProcessRecordItem>([], query.NormalizedPage, query.NormalizedPageSize, 0);
         }
-
-        q = query.Desc ? q.OrderByDescending(x => x.RecordedAt) : q.OrderBy(x => x.RecordedAt);
-
-        var total = await q.CountAsync(ct);
-        var page = query.NormalizedPage;
-        var pageSize = query.NormalizedPageSize;
-
-        var items = await q.Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new ProcessRecordItem(
-                x.Id,
-                x.ResidentCaseId,
-                x.RecordedAt,
-                x.SocialWorker,
-                x.SessionType,
-                x.SessionDurationMinutes,
-                x.EmotionalStateObserved,
-                x.EmotionalStateEnd,
-                x.Summary,
-                x.InterventionsApplied,
-                x.FollowUpActions,
-                x.ProgressNoted,
-                x.ConcernsFlagged,
-                x.ReferralMade,
-                x.NotesRestricted != null && x.NotesRestricted != string.Empty))
-            .ToArrayAsync(ct);
-
-        return new PagedResult<ProcessRecordItem>(items, page, pageSize, total);
     }
 
     public async Task<ProcessRecordItem> CreateAsync(CreateProcessRecordRequest request, CancellationToken ct)
