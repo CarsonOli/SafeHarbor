@@ -4172,31 +4172,24 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\rclau\\.nuget\\packages\\": {},
-    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+    "/Users/georgemartinez/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\rclau\\OneDrive\\Documents\\GitHub\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor\\SafeHarbor.csproj",
+      "projectUniqueName": "/Users/georgemartinez/Desktop/SafeHarbor/backend/SafeHarbor/SafeHarbor/SafeHarbor.csproj",
       "projectName": "SafeHarbor",
-      "projectPath": "C:\\Users\\rclau\\OneDrive\\Documents\\GitHub\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor\\SafeHarbor.csproj",
-      "packagesPath": "C:\\Users\\rclau\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\rclau\\OneDrive\\Documents\\GitHub\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor\\obj\\",
+      "projectPath": "/Users/georgemartinez/Desktop/SafeHarbor/backend/SafeHarbor/SafeHarbor/SafeHarbor.csproj",
+      "packagesPath": "/Users/georgemartinez/.nuget/packages/",
+      "outputPath": "/Users/georgemartinez/Desktop/SafeHarbor/backend/SafeHarbor/SafeHarbor/obj/",
       "projectStyle": "PackageReference",
-      "fallbackFolders": [
-        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-      ],
       "configFilePaths": [
-        "C:\\Users\\rclau\\AppData\\Roaming\\NuGet\\NuGet.Config",
-        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        "/Users/georgemartinez/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
       ],
       "sources": {
-        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -4313,7 +4306,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.104/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.101/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.AspNetCore": "(,10.0.32767]",
           "Microsoft.AspNetCore.Antiforgery": "(,10.0.32767]",

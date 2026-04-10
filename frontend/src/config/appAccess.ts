@@ -17,4 +17,5 @@ export const appNavRoutes: AppNavRoute[] = [
   { to: '/app/process-recording', label: 'Process Recording', roles: ['SocialWorker'] },
   { to: '/app/visitation-conferences', label: 'Visitation & Conferences', roles: ['Admin', 'SocialWorker'] },
   { to: '/app/reports', label: 'Reports', roles: ['Admin', 'SocialWorker'] },
+  { to: '/app/social-media-scorer', label: 'Social Media Scorer', roles: ['Admin'] },
 ]

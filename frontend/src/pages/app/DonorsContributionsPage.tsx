@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { createDonor, fetchDonors } from '../../services/adminOperationsApi'
+import { fetchDonorRiskFlags } from '../../services/mlInsightsApi'
 import { toUserFacingError } from '../../services/httpErrors'
 import { ApiErrorNotice } from '../../components/ApiErrorNotice'
+import { RiskBadge } from '../../components/RiskBadge'
 import type { DonorListItem } from '../../types/adminOperations'
+import type { DonorRiskFlag } from '../../services/mlInsightsApi'
 
 export function DonorsContributionsPage() {
   const [items, setItems] = useState<DonorListItem[]>([])
@@ -15,6 +18,9 @@ export function DonorsContributionsPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Secondary risk flag fetch — silent fallback on error
+  const [riskFlags, setRiskFlags] = useState<Map<string, DonorRiskFlag>>(new Map())
 
   useEffect(() => {
     let cancelled = false
@@ -39,6 +45,25 @@ export function DonorsContributionsPage() {
       cancelled = true
     }
   }, [page, pageSize, search])
+
+  // Load risk flags once on mount — independent of pagination
+  useEffect(() => {
+    let cancelled = false
+    async function loadFlags() {
+      try {
+        const flags = await fetchDonorRiskFlags()
+        if (!cancelled) {
+          const map = new Map<string, DonorRiskFlag>()
+          for (const f of flags) map.set(f.donorId, f)
+          setRiskFlags(map)
+        }
+      } catch {
+        // Silent fallback — risk column simply won't render
+      }
+    }
+    void loadFlags()
+    return () => { cancelled = true }
+  }, [])
 
   async function handleCreateDonor(event: React.FormEvent) {
     event.preventDefault()
@@ -86,17 +111,35 @@ export function DonorsContributionsPage() {
           <>
             <table>
               <thead>
-                <tr><th>Name</th><th>Email</th><th>Last activity</th><th>Lifetime</th></tr>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Last activity</th>
+                  <th>Lifetime</th>
+                  {riskFlags.size > 0 && <th>Lapse Risk</th>}
+                </tr>
               </thead>
               <tbody>
-                {items.map((x) => (
-                  <tr key={x.id}>
-                    <td>{x.name}</td>
-                    <td>{x.email}</td>
-                    <td>{new Date(x.lastActivityAt).toLocaleDateString()}</td>
-                    <td>${x.lifetimeContributions.toFixed(2)}</td>
-                  </tr>
-                ))}
+                {items.map((x) => {
+                  const flag = riskFlags.get(x.id.toString())
+                  return (
+                    <tr key={x.id}>
+                      <td>{x.name}</td>
+                      <td>{x.email}</td>
+                      <td>{new Date(x.lastActivityAt).toLocaleDateString()}</td>
+                      <td>${x.lifetimeContributions.toFixed(2)}</td>
+                      {riskFlags.size > 0 && (
+                        <td>
+                          {flag && (
+                            <span title={flag.signals.join(' · ')}>
+                              <RiskBadge level={flag.level} />
+                            </span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
             <div>

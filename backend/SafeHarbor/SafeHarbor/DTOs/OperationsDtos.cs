@@ -52,7 +52,8 @@ public sealed record ResidentCaseListItem(
     string? SocialWorkerExternalId,
     string? ResidentName,
     DateTimeOffset OpenedAt,
-    DateTimeOffset? ClosedAt);
+    DateTimeOffset? ClosedAt,
+    Guid? ResidentEntityId = null);
 
 public sealed record CreateResidentCaseRequest(
     [property: Required] Guid SafehouseId,

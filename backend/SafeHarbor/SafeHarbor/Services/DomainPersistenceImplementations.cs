@@ -266,11 +266,30 @@ public sealed class ResidentAdminService(
 
 public sealed class DonorAdminService(
     IDonorRepository donors,
+    IContributionRepository contributions,
     IAuditLogger auditLogger,
     IDataRetentionRedactionService retentionRedactionService) : IDonorAdminService
 {
-    public async Task<IReadOnlyCollection<DonorAdminResponse>> GetAllAsync(CancellationToken ct) =>
-        (await donors.ListAsync(ct)).Select(MapAdmin).ToArray();
+    public async Task<IReadOnlyCollection<DonorAdminResponse>> GetAllAsync(CancellationToken ct)
+    {
+        var allDonors  = await donors.ListAsync(ct);
+        var allContribs = await contributions.ListCompletedAsync(ct);
+        var byDonor    = allContribs
+            .GroupBy(c => c.DonorId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        return allDonors.Select(d =>
+        {
+            var dc = byDonor.GetValueOrDefault(d.Id);
+            return MapAdmin(d) with
+            {
+                ContributionCount     = dc?.Count ?? 0,
+                LastContributionDate  = dc?.Max(c => c.ContributionDate),
+                FirstContributionDate = dc?.Min(c => c.ContributionDate),
+                UniqueChannels        = dc?.Select(c => c.ContributionTypeId).Distinct().Count()
+            };
+        }).ToArray();
+    }
 
     public async Task<DonorAdminResponse?> GetByIdAsync(Guid id, CancellationToken ct)
     {
