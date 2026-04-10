@@ -1,13 +1,20 @@
 name: Azure Static Web Apps CI/CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      diagnostic_mode:
+        description: "Run pre-deploy diagnostics and skip Azure upload."
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - deployment
 
 jobs:
   build_and_deploy_job:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     name: Build and Deploy Job
     permissions:
@@ -17,14 +24,58 @@ jobs:
         with:
           submodules: true
           lfs: false
+      - name: Validate SWA deployment token is configured
+        env:
+          # Prefer canonical/shared secret names first so stale Azure-generated keys do not shadow rotated tokens.
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "Missing SWA token. Set one of the following repository secrets: AZURE_STATIC_WEB_APPS_API_TOKEN (preferred), AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING, or AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F."
+            echo "Note: this workflow runs on the deployment branch and reads repository-level secrets."
+            exit 1
+          fi
+      - name: Diagnostic mode summary
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == true }}
+        env:
+          SWA_TOKEN_PRIMARY: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+          SWA_TOKEN_GENERIC: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          SWA_TOKEN_STAGING: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING }}
+          SWA_TOKEN_FALLBACK: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+        run: |
+          # Diagnostic mode intentionally prints only metadata and lengths; never print token values.
+          echo "Diagnostic mode is ON. Azure upload step will be skipped."
+          echo "event_name=${GITHUB_EVENT_NAME}"
+          echo "ref=${GITHUB_REF}"
+          echo "sha=${GITHUB_SHA}"
+          [ -d "./frontend" ] && echo "frontend directory exists" || echo "frontend directory missing"
+
+          if [ -n "$SWA_TOKEN_GENERIC" ]; then
+            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN"
+          elif [ -n "$SWA_TOKEN_STAGING" ]; then
+            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING"
+          elif [ -n "$SWA_TOKEN_PRIMARY" ]; then
+            echo "token_source=AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F"
+          else
+            echo "token_source=none"
+          fi
+
+          if [ -n "$SWA_TOKEN_FALLBACK" ]; then
+            echo "token_present=true"
+            echo "token_length=${#SWA_TOKEN_FALLBACK}"
+          else
+            echo "token_present=false"
+          fi
       - name: Build And Deploy
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == true) }}
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         env:
           # Route SPA API calls to the deployed backend service instead of same-origin SWA paths.
           VITE_API_BASE_URL: https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
+          # Keep compatibility with Azure-generated and repo-standard secret names used elsewhere in this repo.
+          # Prefer shared secret names first to avoid shadowing a newly rotated token with an old generated key.
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_STAGING || secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_FIELD_09AFC320F }}
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
@@ -36,5 +87,3 @@ jobs:
           # Build compiled Vite assets and hard-fail if source TSX entrypoints leak into deploy output.
           app_build_command: "npm run build && test -f dist/index.html && ! grep -q '/src/main.tsx' dist/index.html && cp staticwebapp.config.json dist/staticwebapp.config.json"
           ###### End of Repository/Build Configurations ######
-
-
