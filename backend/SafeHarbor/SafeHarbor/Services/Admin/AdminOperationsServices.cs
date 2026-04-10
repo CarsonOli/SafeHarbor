@@ -448,7 +448,7 @@ public sealed class DonorContributionService(SafeHarborDbContext db) : IDonorCon
 {
     public async Task<PagedResult<DonorListItem>> GetDonorsAsync(PagingQuery query, CancellationToken ct)
     {
-        var q = db.Donors.AsNoTracking().AsQueryable();
+        var q = db.Supporters.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim().ToLower();
@@ -470,7 +470,7 @@ public sealed class DonorContributionService(SafeHarborDbContext db) : IDonorCon
 
     public async Task<DonorListItem> CreateDonorAsync(CreateDonorRequest request, CancellationToken ct)
     {
-        var donor = new Donor
+        var supporter = new Supporter
         {
             Id = Guid.NewGuid(),
             Name = request.Name,
@@ -480,20 +480,20 @@ public sealed class DonorContributionService(SafeHarborDbContext db) : IDonorCon
             LifetimeDonations = 0m
         };
 
-        db.Donors.Add(donor);
+        db.Supporters.Add(supporter);
         await db.SaveChangesAsync(ct);
-        return new DonorListItem(donor.Id, donor.DisplayName, donor.Email, donor.LastActivityAt, donor.LifetimeDonations);
+        return new DonorListItem(supporter.Id, supporter.DisplayName, supporter.Email, supporter.LastActivityAt, supporter.LifetimeDonations);
     }
 
     public async Task<ContributionListItem> CreateContributionAsync(CreateContributionRequest request, CancellationToken ct)
     {
-        var donor = await db.Donors.FirstOrDefaultAsync(x => x.Id == request.DonorId, ct)
-            ?? throw new KeyNotFoundException($"Donor {request.DonorId} was not found.");
+        var supporter = await db.Supporters.FirstOrDefaultAsync(x => x.Id == request.DonorId, ct)
+            ?? throw new KeyNotFoundException($"Supporter {request.DonorId} was not found.");
 
         var contribution = new Contribution
         {
             Id = Guid.NewGuid(),
-            DonorId = request.DonorId,
+            SupporterId = request.DonorId,
             Amount = request.Amount,
             CampaignId = request.CampaignId,
             ContributionDate = request.ContributionDate ?? DateTimeOffset.UtcNow,
@@ -501,14 +501,14 @@ public sealed class DonorContributionService(SafeHarborDbContext db) : IDonorCon
             StatusStateId = request.StatusStateId
         };
 
-        donor.LifetimeDonations += request.Amount;
-        donor.LastActivityAt = DateTimeOffset.UtcNow;
+        supporter.LifetimeDonations += request.Amount;
+        supporter.LastActivityAt = DateTimeOffset.UtcNow;
 
         db.Contributions.Add(contribution);
         await db.SaveChangesAsync(ct);
 
         var statusName = await db.StatusState.AsNoTracking().Where(x => x.Id == request.StatusStateId).Select(x => x.Name).FirstOrDefaultAsync(ct) ?? "Unknown";
-        return new ContributionListItem(contribution.Id, donor.DisplayName, contribution.Amount, contribution.ContributionDate, statusName);
+        return new ContributionListItem(contribution.Id, supporter.DisplayName, contribution.Amount, contribution.ContributionDate, statusName);
     }
 
     public async Task<bool> CreateAllocationAsync(CreateAllocationRequest request, CancellationToken ct)
@@ -987,3 +987,5 @@ public sealed class ReportsAnalyticsService(SafeHarborDbContext db) : IReportsAn
         decimal? AttributedDonationAmount,
         int? AttributedDonationCount);
 }
+
+

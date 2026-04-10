@@ -46,7 +46,7 @@ FROM tmp_safehouses
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 3. Import Donors from supporters.csv
+-- 3. Import Supporters from supporters.csv
 -- ============================================================
 CREATE TEMP TABLE tmp_supporters (
   csv_id           INT,
@@ -70,7 +70,7 @@ CREATE TEMP TABLE tmp_supporters (
 
 ALTER TABLE tmp_supporters ADD COLUMN uuid_id UUID DEFAULT gen_random_uuid();
 
-INSERT INTO "Donors" ("Id", "Name", "DisplayName", "Email", "LifetimeDonations",
+INSERT INTO "Supporters" ("Id", "Name", "DisplayName", "Email", "LifetimeDonations",
                       "LastActivityAt", "CreatedAt", "CreatedAtUtc",
                       "UpdatedAt", "UpdatedAtUtc", "CreatedBy")
 SELECT
@@ -104,7 +104,7 @@ CREATE TEMP TABLE tmp_donations (
 
 \COPY tmp_donations FROM 'C:/Users/rclau/Downloads/lighthouse_csv_v7/lighthouse_csv_v7/donations.csv' CSV HEADER;
 
-INSERT INTO "Contributions" ("Id", "DonorId", "ContributionTypeId", "StatusStateId",
+INSERT INTO "Contributions" ("Id", "SupporterId", "ContributionTypeId", "StatusStateId",
                               "Amount", "Frequency", "ContributionDate",
                               "CreatedAt", "UpdatedAt", "CreatedBy")
 SELECT
@@ -127,16 +127,16 @@ FROM tmp_donations td
 JOIN tmp_supporters ts ON ts.csv_id = td.supporter_id;
 
 -- ============================================================
--- 5. Update LifetimeDonations totals per donor
+-- 5. Update LifetimeDonations totals per supporter
 -- ============================================================
-UPDATE "Donors" d
+UPDATE "Supporters" d
 SET "LifetimeDonations" = sub.total
 FROM (
-  SELECT "DonorId", SUM("Amount") AS total
+  SELECT "SupporterId", SUM("Amount") AS total
   FROM "Contributions"
-  GROUP BY "DonorId"
+  GROUP BY "SupporterId"
 ) sub
-WHERE d."Id" = sub."DonorId";
+WHERE d."Id" = sub."SupporterId";
 
 -- ============================================================
 -- 6. Import ContributionAllocations from donation_allocations.csv
@@ -188,7 +188,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 SELECT 'Safehouses'            AS "Table", COUNT(*) AS "Rows" FROM "Safehouses" WHERE "CreatedBy" = 'import'
 UNION ALL
-SELECT 'Donors',                           COUNT(*) FROM "Donors"        WHERE "CreatedBy" = 'import'
+SELECT 'Supporters',                       COUNT(*) FROM "Supporters"    WHERE "CreatedBy" = 'import'
 UNION ALL
 SELECT 'Contributions',                    COUNT(*) FROM "Contributions"  WHERE "CreatedBy" = 'import'
 UNION ALL

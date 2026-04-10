@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
@@ -183,6 +184,63 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
         // so dashboard works immediately with only auth identity claims.
         var dashboardResponse = await client.GetAsync("/api/donor/dashboard");
         Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_CreatesMatchingSupporterRecord()
+    {
+        using var client = _factory.CreateClient();
+        const string email = "supporter-provision@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { email, firstName = "Supporter", lastName = "Provision", password = "Password123!Aa" });
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+        var supporterCount = await db.Supporters.CountAsync(x => x.Email == email);
+
+        // Registration should atomically provision a supporter row used by contribution persistence flows.
+        Assert.Equal(1, supporterCount);
+    }
+
+    [Fact]
+    public async Task ReconcileDomainProfiles_IsIdempotent_ForSupporterProvisioning()
+    {
+        const string email = "supporter-idempotent@example.com";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+            db.Users.Add(new User
+            {
+                UserId = Guid.NewGuid(),
+                Email = email,
+                Role = "user",
+                PasswordHash = "not-used-in-this-test",
+                FirstName = "Idempotent",
+                LastName = "Supporter",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var adminClient = _factory.CreateClient();
+        adminClient.DefaultRequestHeaders.Add("X-Test-Auth", "true");
+        adminClient.DefaultRequestHeaders.Add("X-Test-Role", "Admin");
+        adminClient.DefaultRequestHeaders.Add("X-Test-Email", "admin@safeharbor.org");
+
+        var firstRun = await adminClient.PostAsync("/api/admin/auth-maintenance/reconcile-domain-profiles", null);
+        Assert.Equal(HttpStatusCode.OK, firstRun.StatusCode);
+        var secondRun = await adminClient.PostAsync("/api/admin/auth-maintenance/reconcile-domain-profiles", null);
+        Assert.Equal(HttpStatusCode.OK, secondRun.StatusCode);
+
+        using var assertScope = _factory.Services.CreateScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+        var supporterCount = await assertDb.Supporters.CountAsync(x => x.Email == email);
+        Assert.Equal(1, supporterCount);
     }
 
     [Fact]

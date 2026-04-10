@@ -1,6 +1,6 @@
 namespace SafeHarbor.Models.Entities;
 
-public class Donor : AuditableEntity
+public class Supporter : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
