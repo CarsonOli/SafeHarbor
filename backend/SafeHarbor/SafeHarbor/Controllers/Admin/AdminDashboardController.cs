@@ -1,26 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SafeHarbor.Authorization;
 using SafeHarbor.DTOs;
+using SafeHarbor.Services.Admin;
 
 namespace SafeHarbor.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/dashboard")]
 [Authorize(Policy = PolicyNames.StaffOrAdmin)]
-public sealed class AdminDashboardController : ControllerBase
+public sealed class AdminDashboardController(IAdminDashboardService adminDashboardService) : ControllerBase
 {
     [HttpGet]
-    public ActionResult GetSummary()
+    public async Task<ActionResult<DashboardSummaryResponse>> GetSummary(CancellationToken ct)
     {
-        // NOTE: The endpoint intentionally returns a versioned "not implemented" envelope
-        // instead of placeholder zero values so clients can distinguish "missing feature"
-        // from genuine empty operational data.
-        return StatusCode(StatusCodes.Status501NotImplemented, new NotImplementedEnvelope(
-            ErrorCode: "NotImplemented.v1",
-            Message: "Admin dashboard summary is not implemented yet.",
-            TraceId: HttpContext.TraceIdentifier,
-            ApiVersion: "v1"));
+        return Ok(await adminDashboardService.GetSummaryAsync(ct));
     }
 }

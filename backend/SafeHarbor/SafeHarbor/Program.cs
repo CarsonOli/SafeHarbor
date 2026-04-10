@@ -195,6 +195,7 @@ builder.Services.AddScoped<ICaseloadInventoryService, CaseloadInventoryService>(
 builder.Services.AddScoped<IProcessRecordingService, ProcessRecordingService>();
 builder.Services.AddScoped<IVisitationConferenceService, VisitationConferenceService>();
 builder.Services.AddScoped<IDonorContributionService, DonorContributionService>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddScoped<IReportsAnalyticsService, ReportsAnalyticsService>();
 builder.Services.AddScoped<IImpactAggregateService, ImpactAggregateService>();
 builder.Services.AddScoped<IDonorRiskFlagService, DonorRiskFlagService>();
