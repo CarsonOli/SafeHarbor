@@ -75,7 +75,7 @@ export const appRoutes = [
           },
           {
             path: 'process-recording',
-            element: <ProtectedRoute allowedRoles={['SocialWorker']} />,
+            element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
             children: [{ index: true, element: <ProcessRecordingPage /> }],
           },
           { path: 'visitation-conferences', element: <HomeVisitationConferencesPage /> },
