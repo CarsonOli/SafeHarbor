@@ -55,8 +55,11 @@ body {
 }
 
 .container {
-  width: min(1100px, calc(100% - 2rem));
+  width: 100%;
+  /* Change this from 800px or 600px to 1200px or even 1400px */
+  max-width: 1200px; 
   margin: 0 auto;
+  padding: 0 2rem; /* Keeps a small "breathing room" on the edges */
 }
 
 .skip-link {
