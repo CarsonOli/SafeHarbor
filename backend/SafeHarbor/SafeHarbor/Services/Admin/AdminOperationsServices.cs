@@ -200,6 +200,15 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         var entity = await db.ResidentCases.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return false;
 
+        // NOTE: Some deployed databases have FK constraints without cascade behavior for
+        // resident_case_id links. We clear known dependents explicitly so delete remains
+        // stable across migration drift and avoids surfacing a 500 to the client.
+        await db.ResidentAssessments.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+        await db.ProcessRecordings.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+        await db.HomeVisits.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+        await db.CaseConferences.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+        await db.InterventionPlans.Where(x => x.ResidentCaseId == id).ExecuteDeleteAsync(ct);
+
         db.ResidentCases.Remove(entity);
         await db.SaveChangesAsync(ct);
         return true;
