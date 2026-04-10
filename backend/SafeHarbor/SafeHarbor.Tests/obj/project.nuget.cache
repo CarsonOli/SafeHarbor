@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "dgSpecHash": "h4oo4X0rN9Q=",
+  "success": false,
+  "projectFilePath": "C:\\Users\\carso\\source\\repos\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor.Tests\\SafeHarbor.Tests.csproj",
+  "expectedPackageFiles": [],
+  "logs": [
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Unable to load the service index for source https://api.nuget.org/v3/index.json.\r\n  No connection could be made because the target machine actively refused it. (127.0.0.1:9)\r\n  No connection could be made because the target machine actively refused it.",
+      "projectPath": "C:\\Users\\carso\\source\\repos\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor.Tests\\SafeHarbor.Tests.csproj",
+      "filePath": "C:\\Users\\carso\\source\\repos\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor.Tests\\SafeHarbor.Tests.csproj",
+      "targetGraphs": []
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Unable to load the service index for source https://api.nuget.org/v3/index.json.\r\n  No connection could be made because the target machine actively refused it. (127.0.0.1:9)\r\n  No connection could be made because the target machine actively refused it.",
+      "projectPath": "C:\\Users\\carso\\source\\repos\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor.Tests\\SafeHarbor.Tests.csproj",
+      "filePath": "C:\\Users\\carso\\source\\repos\\SafeHarbor\\backend\\SafeHarbor\\SafeHarbor.Tests\\SafeHarbor.Tests.csproj",
+      "targetGraphs": []
+    }
+  ]
+}

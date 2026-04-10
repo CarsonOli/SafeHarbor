@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using SafeHarbor.Data;
 using SafeHarbor.Models.Entities;
@@ -24,7 +25,7 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
 
         var registerResponse = await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = "roleclaims@example.com", role = "Donor", password = "Password123!Aa" });
+            new { email = "roleclaims@example.com", firstName = "Role", lastName = "Claims", password = "Password123!Aa" });
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
 
         var response = await client.PostAsJsonAsync(
@@ -55,12 +56,26 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
     [Fact]
     public async Task Login_DatabaseStaffRole_MapsToSocialWorkerClaimsAndKeepsDbRoleClaim()
     {
-        using var client = _factory.CreateClient();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+            var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
+            var user = new User
+            {
+                UserId = Guid.NewGuid(),
+                Email = "staffclaims@example.com",
+                Role = "staff",
+                FirstName = "Staff",
+                LastName = "Claims",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            user.PasswordHash = passwordHasher.HashPassword(user, "Password123!Aa");
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
 
-        var registerResponse = await client.PostAsJsonAsync(
-            "/api/auth/register",
-            new { email = "staffclaims@example.com", role = "staff", password = "Password123!Aa" });
-        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+        using var client = _factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
             "/api/auth/login",
@@ -85,7 +100,7 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
 
         var response = await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = "weakpass@example.com", role = "Donor", password = "weak" });
+            new { email = "weakpass@example.com", firstName = "Weak", lastName = "Pass", password = "weak" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<ErrorEnvelope>();
@@ -101,7 +116,7 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
 
         var registerResponse = await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = "lockout@example.com", role = "Donor", password = "Password123!Aa" });
+            new { email = "lockout@example.com", firstName = "Lock", lastName = "Out", password = "Password123!Aa" });
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
 
         // Identity lockout threshold is configured to 3 failed attempts.
@@ -134,7 +149,7 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
 
         await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = "me@example.com", role = "Donor", password = "Password123!Aa" });
+            new { email = "me@example.com", firstName = "Me", lastName = "Example", password = "Password123!Aa" });
 
         client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
         client.DefaultRequestHeaders.Add("X-Test-Role", "Donor");
@@ -157,7 +172,7 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
 
         var registerResponse = await client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = donorEmail, role = "Donor", password = "Password123!Aa" });
+            new { email = donorEmail, firstName = "Newly", lastName = "Registered", password = "Password123!Aa" });
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
 
         client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
@@ -168,6 +183,26 @@ public sealed class LocalAuthIntegrationTests : IClassFixture<SafeHarborApiFacto
         // so dashboard works immediately with only auth identity claims.
         var dashboardResponse = await client.GetAsync("/api/donor/dashboard");
         Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_IgnoresClientRoleAndPersistsUserRole()
+    {
+        using var client = _factory.CreateClient();
+        const string email = "self-role-attempt@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { email, firstName = "Self", lastName = "Role", password = "Password123!Aa", role = "Admin" });
+
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SafeHarborDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Email == email);
+
+        // SECURITY: self-service registration must never create elevated roles.
+        Assert.Equal("user", user.Role);
     }
 
     [Fact]

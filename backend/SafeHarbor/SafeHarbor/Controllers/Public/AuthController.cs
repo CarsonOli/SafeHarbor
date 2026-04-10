@@ -27,7 +27,7 @@ public sealed class AuthController(
         }
 
         var registerResult = await authService.RegisterAsync(
-            new RegisterAuthRequest(request.Email, request.Role, request.Password),
+            new RegisterAuthRequest(request.Email, request.Password, request.FirstName, request.LastName),
             cancellationToken);
 
         if (!registerResult.Succeeded)
@@ -137,7 +137,8 @@ public sealed record LoginRequest(
 
 public sealed record RegisterRequest(
     [param: Required, EmailAddress] string Email,
-    [param: Required] string Role,
+    [param: Required, StringLength(100, MinimumLength = 1)] string FirstName,
+    [param: Required, StringLength(100, MinimumLength = 1)] string LastName,
     // NOTE: Base minimum-length validation is API-contract level; full complexity is enforced
     // in AuthService from configured PasswordPolicyOptions to avoid duplicating policy constants.
     [param: Required, MinLength(8)] string Password);

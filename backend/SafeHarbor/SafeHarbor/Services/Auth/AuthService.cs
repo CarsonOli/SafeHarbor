@@ -17,8 +17,7 @@ public sealed class AuthService(
     IOptions<PasswordPolicyOptions> passwordPolicyOptions,
     IDomainProfileProvisioningService domainProfileProvisioningService) : IAuthService
 {
-    private static readonly HashSet<string> SupportedDatabaseRoles =
-        ["admin", "staff", "user"];
+    private const string SelfRegisteredDatabaseRole = "user";
 
     // NOTE: This alias map is the single source for accepted role vocabulary on inbound auth requests.
     // It intentionally allows both DB role values (admin/staff/user) and app policy roles
@@ -43,10 +42,16 @@ public sealed class AuthService(
             return new AuthRegisterResult(false, "ValidationError", "Email is required.");
         }
 
-        var normalizedRole = NormalizeToDatabaseRole(request.Role);
-        if (normalizedRole is null || !SupportedDatabaseRoles.Contains(normalizedRole))
+        var normalizedFirstName = request.FirstName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedFirstName))
         {
-            return new AuthRegisterResult(false, "ValidationError", "Role must be one of: admin, staff, user.");
+            return new AuthRegisterResult(false, "ValidationError", "First name is required.");
+        }
+
+        var normalizedLastName = request.LastName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedLastName))
+        {
+            return new AuthRegisterResult(false, "ValidationError", "Last name is required.");
         }
 
         var passwordValidationError = ValidatePasswordAgainstPolicy(request.Password);
@@ -69,10 +74,12 @@ public sealed class AuthService(
         var user = new User
         {
             UserId = Guid.NewGuid(),
-            FirstName = request.FirstName?.Trim() ?? string.Empty,
-            LastName = request.LastName?.Trim() ?? string.Empty,
+            FirstName = normalizedFirstName,
+            LastName = normalizedLastName,
             Email = normalizedEmail,
-            Role = normalizedRole,
+            // SECURITY: self-service registration is always donor/user role.
+            // Elevated roles are provisioned through controlled admin workflows only.
+            Role = SelfRegisteredDatabaseRole,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
