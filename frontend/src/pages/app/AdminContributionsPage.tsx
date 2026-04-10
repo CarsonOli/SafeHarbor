@@ -1,18 +1,12 @@
-import AdminContributionTable from '../../components/AdminContributionTable';
+import { DonorsContributionsPage } from './DonorsContributionsPage'
 
-const AdminContributionsPage = () => {
-  return (
-    <div className="page-container">
-      <header className="page-header">
-        <h1>Management Console</h1>
-        <p>Review and manage all SafeHarbor contributions.</p>
-      </header>
-      
-      <main>
-        <AdminContributionTable />
-      </main>
-    </div>
-  );
-};
-
-export default AdminContributionsPage;
+/**
+ * Keep the legacy admin contributions route component name as a thin alias.
+ *
+ * Why: `main.tsx` and existing route links still reference `AdminContributionsPage`.
+ * Re-exporting the current implementation prevents route/import breakage without
+ * changing the current page behavior or duplicating contribution UI logic.
+ */
+export default function AdminContributionsPage() {
+  return <DonorsContributionsPage />
+}

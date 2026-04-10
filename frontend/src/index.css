@@ -31,6 +31,19 @@
   --font-serif: 'Playfair Display', Georgia, serif;
 }
 
+[data-theme="dark"] {
+  --color-bg: #0f1923;
+  --color-surface: #1a2535;
+  --color-text: #e2e8f0;
+  --color-subtle: #94a3b8;
+  --color-border: #2d3f50;
+  --color-primary: #4a9d9d;
+  --color-primary-contrast: #ffffff;
+  --color-secondary: #1e3a3a;
+  --color-accent-soft: #3a1f15;
+  --color-muted-track: #1e2f3d;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -363,6 +376,16 @@ select {
 .form-error {
   color: var(--color-danger);
   font-weight: 600;
+}
+
+.form-success {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.auth-mode-toggle {
+  margin-top: var(--space-3);
+  width: 100%;
 }
 
 .divider {

@@ -5,6 +5,7 @@ import type {
   SocialPostMetricListItem,
 } from '../types/impact'
 import { buildAuthHeaders } from './authHeaders'
+import { HttpError, NOT_AUTHORIZED_MESSAGE } from './httpErrors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 const IMPACT_ENDPOINT = import.meta.env.VITE_IMPACT_AGGREGATE_PATH ?? '/api/impact/aggregate'
@@ -12,6 +13,10 @@ const REPORTS_ENDPOINT = import.meta.env.VITE_REPORTS_ANALYTICS_PATH ?? '/api/ad
 const SOCIAL_METRICS_ENDPOINT =
   import.meta.env.VITE_SOCIAL_POST_METRICS_PATH ?? '/api/admin/social-post-metrics'
 const ENABLE_DEV_FALLBACK = (import.meta.env.VITE_ENABLE_IMPACT_DEV_FALLBACK ?? 'false') === 'true'
+const STATIC_WEB_APP_FALLBACK_API_HOSTS = [
+  'https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net',
+  'https://safeharbor-api-staging.azurewebsites.net',
+]
 
 const fallbackImpactData: ImpactSummary = {
   generatedAt: '2026-04-01T00:00:00.000Z',
@@ -104,6 +109,25 @@ const fallbackReportsData: ReportsAnalyticsResponse = {
   ],
 }
 
+function resolveReportsApiBaseCandidates(): string[] {
+  if (API_BASE) {
+    return [API_BASE]
+  }
+
+  if (import.meta.env.DEV) {
+    // NOTE: Keep the Vite same-origin path first, then explicit local API host fallbacks.
+    // This avoids regressions for teams already using a local reverse proxy.
+    return ['', 'https://localhost:7217', 'http://localhost:5264', 'http://localhost:5000']
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')) {
+    // NOTE: Prefer explicit backend hosts first in SWA deployments where /api/* may not be proxied.
+    return [...STATIC_WEB_APP_FALLBACK_API_HOSTS, '']
+  }
+
+  return ['']
+}
+
 export async function fetchImpactSummary(): Promise<ImpactSummary> {
   try {
     // NOTE: The dashboard must remain read-only and aggregate-only.
@@ -116,43 +140,122 @@ export async function fetchImpactSummary(): Promise<ImpactSummary> {
     })
 
     if (!response.ok) {
-      throw new Error(`Impact endpoint returned ${response.status}`)
+      throw new HttpError(response.status, `Impact endpoint returned ${response.status}`, {
+        method: 'GET',
+        endpoint: IMPACT_ENDPOINT,
+      })
     }
 
     const data = (await response.json()) as ImpactSummary
     return data
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      throw error
+    }
+
     // NOTE: Mock fallback is intentionally opt-in for local development only.
     // Production/default behavior must surface backend outages to the UI.
     if (ENABLE_DEV_FALLBACK) {
       return fallbackImpactData
     }
 
-    throw new Error('Unable to load impact summary from backend API.')
+    if (error instanceof HttpError) {
+      throw error
+    }
+
+    throw new HttpError(0, 'Unable to load impact summary from backend API.', {
+      method: 'GET',
+      endpoint: IMPACT_ENDPOINT,
+    })
   }
 }
 
 export async function fetchReportsAnalytics(): Promise<ReportsAnalyticsResponse> {
   try {
-    const response = await fetch(`${API_BASE}${REPORTS_ENDPOINT}`, {
-      method: 'GET',
-      headers: buildAuthHeaders({
-        Accept: 'application/json',
-      }),
-    })
+    const baseCandidates = resolveReportsApiBaseCandidates()
+    let hadNetworkFailure = false
 
-    if (!response.ok) {
-      throw new Error(`Reports endpoint returned ${response.status}`)
+    for (const baseUrl of baseCandidates) {
+      let response: Response
+
+      try {
+        response = await fetch(`${baseUrl}${REPORTS_ENDPOINT}`, {
+          method: 'GET',
+          headers: buildAuthHeaders({
+            Accept: 'application/json',
+          }),
+        })
+      } catch {
+        hadNetworkFailure = true
+        continue
+      }
+
+      if (response.status === 404 && baseUrl === '' && import.meta.env.DEV && baseCandidates.length > 1) {
+        // In local Vite sessions, this usually means "/api" hit the frontend server.
+        // Continue to explicit backend host candidates before failing the request.
+        continue
+      }
+
+      if ((response.status === 404 || response.status === 405) && baseUrl === '' && !import.meta.env.DEV) {
+        if (baseCandidates.length > 1) {
+          continue
+        }
+
+        throw new HttpError(
+          response.status,
+          `Reports analytics endpoint ${REPORTS_ENDPOINT} is not reachable on this frontend origin (HTTP ${response.status}). ` +
+            'Set VITE_API_BASE_URL to the backend URL or configure frontend hosting to proxy /api/* to the API.',
+          {
+            method: 'GET',
+            endpoint: REPORTS_ENDPOINT,
+          },
+        )
+      }
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new HttpError(403, NOT_AUTHORIZED_MESSAGE, { method: 'GET', endpoint: REPORTS_ENDPOINT })
+        }
+
+        throw new HttpError(response.status, `Reports endpoint returned ${response.status}`, {
+          method: 'GET',
+          endpoint: REPORTS_ENDPOINT,
+        })
+      }
+
+      return (await response.json()) as ReportsAnalyticsResponse
     }
 
-    return (await response.json()) as ReportsAnalyticsResponse
-  } catch {
+    if (hadNetworkFailure) {
+      throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
+        method: 'GET',
+        endpoint: REPORTS_ENDPOINT,
+      })
+    }
+
+    throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
+      method: 'GET',
+      endpoint: REPORTS_ENDPOINT,
+    })
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      // Preserve explicit 403 semantics so staff/donor route mismatches are visible in UI.
+      throw error
+    }
+
     // NOTE: Fallback is explicitly gated so missing backend integrations fail loudly by default.
     if (ENABLE_DEV_FALLBACK) {
       return fallbackReportsData
     }
 
-    throw new Error('Unable to load reports analytics from backend API.')
+    if (error instanceof HttpError) {
+      throw error
+    }
+
+    throw new HttpError(0, 'Unable to load reports analytics from backend API.', {
+      method: 'GET',
+      endpoint: REPORTS_ENDPOINT,
+    })
   }
 }
 
@@ -165,7 +268,10 @@ export async function fetchSocialPostMetrics(): Promise<SocialPostMetricListItem
   })
 
   if (!response.ok) {
-    throw new Error(`Social post metrics endpoint returned ${response.status}`)
+    throw new HttpError(response.status, `Social post metrics endpoint returned ${response.status}`, {
+      method: 'GET',
+      endpoint: SOCIAL_METRICS_ENDPOINT,
+    })
   }
 
   return (await response.json()) as SocialPostMetricListItem[]
@@ -184,7 +290,10 @@ export async function createSocialPostMetric(
   })
 
   if (!response.ok) {
-    throw new Error(`Create social post metric endpoint returned ${response.status}`)
+    throw new HttpError(response.status, `Create social post metric endpoint returned ${response.status}`, {
+      method: 'POST',
+      endpoint: SOCIAL_METRICS_ENDPOINT,
+    })
   }
 
   return (await response.json()) as SocialPostMetricListItem

@@ -1,7 +1,11 @@
-import type { AppRole } from '../auth/authSession'
+import { mapAppRoleToDatabaseRole, type AppRole } from '../auth/authSession'
 
-const LOCAL_LOGIN_ENDPOINT = '/api/auth/local-login'
-const LOCAL_REGISTER_ENDPOINT = '/api/auth/local-register'
+const LOGIN_ENDPOINT = '/api/auth/login'
+const LOCAL_REGISTER_ENDPOINT = '/api/auth/register'
+const STATIC_WEB_APP_FALLBACK_API_HOSTS = [
+  'https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net',
+  'https://safeharbor-api-staging.azurewebsites.net',
+]
 
 type LocalLoginResponse = {
   idToken: string
@@ -27,12 +31,36 @@ function resolveApiBaseCandidates(): string[] {
     return ['', 'https://localhost:7217', 'http://localhost:5264', 'http://localhost:5000']
   }
 
+  // In deployed Azure Static Web Apps, frontend and backend may live on separate hosts.
+  // Keep same-origin first for environments with an API proxy, then fall back to known
+  // App Service hosts so auth flows still work when proxy wiring/env config is absent.
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.azurestaticapps.net')) {
+    // NOTE: Prefer explicit backend hosts first to avoid 405s from the static host
+    // when no API proxy is configured for /api/*.
+    return [...STATIC_WEB_APP_FALLBACK_API_HOSTS, '']
+  }
+
   return ['']
 }
 
 async function readApiError(response: Response, fallbackMessage: string): Promise<Error> {
-  const errorBody = (await response.json().catch(() => ({}))) as { error?: string }
-  return new Error(errorBody.error ?? fallbackMessage)
+  const errorBody = (await response.json().catch(() => ({}))) as {
+    error?: string
+    Error?: string
+    message?: string
+    Message?: string
+    errorCode?: string
+    ErrorCode?: string
+  }
+
+  const message =
+    errorBody.error ??
+    errorBody.Error ??
+    errorBody.message ??
+    errorBody.Message ??
+    fallbackMessage
+
+  return new Error(message)
 }
 
 async function postLocalAuthJson(endpoint: string, payload: object): Promise<Response> {
@@ -40,8 +68,10 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
   let hadNetworkFailure = false
 
   for (const baseUrl of baseCandidates) {
+    let response: Response
+
     try {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      response = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,17 +79,33 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
         },
         body: JSON.stringify(payload),
       })
+    } catch {
+      hadNetworkFailure = true
+      continue
+    }
 
-      if (response.status === 404 && baseUrl === '' && import.meta.env.DEV) {
-        // In local Vite development, a 404 on same-origin usually means "/api" hit the frontend
-        // server instead of the backend. Continue to explicit backend URL fallbacks.
+    if (response.status === 404 && baseUrl === '' && import.meta.env.DEV) {
+      // In local Vite development, a 404 on same-origin usually means "/api" hit the frontend
+      // server instead of the backend. Continue to explicit backend URL fallbacks.
+      continue
+    }
+
+    if ((response.status === 404 || response.status === 405) && baseUrl === '' && !import.meta.env.DEV) {
+      if (baseCandidates.length > 1) {
+        // Preserve compatibility with environments that provide a secondary API host fallback.
         continue
       }
 
-      return response
-    } catch {
-      hadNetworkFailure = true
+      // In deployed environments a relative "/api/*" call should only be used when the frontend host
+      // actually proxies API traffic. A 404/405 here usually means the request hit static hosting
+      // instead of the backend API, so include actionable guidance in the surfaced error.
+      throw new Error(
+        `Auth endpoint ${endpoint} is not reachable on this frontend origin (HTTP ${response.status}). ` +
+          'Set VITE_API_BASE_URL to the backend URL or configure frontend hosting to proxy /api/* to the API.'
+      )
     }
+
+    return response
   }
 
   if (hadNetworkFailure) {
@@ -73,11 +119,11 @@ async function postLocalAuthJson(endpoint: string, payload: object): Promise<Res
 }
 
 /**
- * Development-only helper that exchanges an email+role selection for a signed JWT
- * from the backend. This lets local testing exercise real bearer-token plumbing.
+ * Exchanges email/password credentials for a signed JWT
+ * from the backend. This keeps frontend auth storage aligned with backend token issuance.
  */
-export async function requestLocalDevelopmentToken(email: string, role: AppRole, password: string): Promise<string> {
-  const response = await postLocalAuthJson(LOCAL_LOGIN_ENDPOINT, { email, role, password })
+export async function requestLocalDevelopmentToken(email: string, password: string): Promise<string> {
+  const response = await postLocalAuthJson(LOGIN_ENDPOINT, { email, password })
 
   if (!response.ok) {
     throw await readApiError(response, `Local login failed with status ${response.status}`)
@@ -88,11 +134,16 @@ export async function requestLocalDevelopmentToken(email: string, role: AppRole,
 }
 
 /**
- * Creates a local-development account that can later request JWTs via /local-login.
+ * Creates a local-development account that can later request JWTs via /api/auth/login.
  * The backend stores accounts in-memory only, so this is intentionally local and ephemeral.
  */
 export async function registerLocalDevelopmentAccount(request: LocalRegisterRequest): Promise<void> {
-  const response = await postLocalAuthJson(LOCAL_REGISTER_ENDPOINT, request)
+  // Keep registration payloads on DB role vocabulary so backend storage and JWT role-mapping
+  // stay explicitly aligned with the persisted lighthouse.users role contract.
+  const response = await postLocalAuthJson(LOCAL_REGISTER_ENDPOINT, {
+    ...request,
+    role: mapAppRoleToDatabaseRole(request.role),
+  })
 
   if (!response.ok) {
     throw await readApiError(response, `Local account creation failed with status ${response.status}`)

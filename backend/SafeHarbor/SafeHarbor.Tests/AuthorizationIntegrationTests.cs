@@ -40,6 +40,18 @@ public sealed class AuthorizationIntegrationTests : IClassFixture<SafeHarborApiF
         Assert.Equal(HttpStatusCode.Forbidden, donorResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task SocialWorker_CanAccessStaffEndpoint_ButCannotAccessAdminOnlyEndpoint()
+    {
+        using var socialWorkerClient = CreateAuthenticatedClient(role: "SocialWorker", email: "staff@safeharbor.org");
+
+        var allowedResponse = await socialWorkerClient.GetAsync("/api/admin/caseload/residents");
+        var forbiddenResponse = await socialWorkerClient.GetAsync("/api/admin/donor-analytics");
+
+        Assert.Equal(HttpStatusCode.OK, allowedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+    }
+
     [Theory]
     [InlineData("/api/donor/dashboard", "GET")]
     [InlineData("/api/donor/contribution", "POST")]

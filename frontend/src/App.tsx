@@ -3,26 +3,58 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { CookieConsentBanner } from './components/CookieConsentBanner'
 import { useAuth } from './auth/AuthContext'
 import { requestLocalDevelopmentToken } from './services/localAuthApi'
-import type { AppRole } from './auth/authSession'
+import { appNavRoutes } from './config/appAccess'
 
 const DEV_AUTO_LOGIN_EMAIL = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL as string | undefined
 const DEV_AUTO_LOGIN_PASSWORD = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD as string | undefined
-const DEV_AUTO_LOGIN_ROLE = import.meta.env.VITE_DEV_AUTO_LOGIN_ROLE as AppRole | undefined
 
 function App() {
-  const { session, logout, loginWithIdentityToken } = useAuth()
+  const { session, logout, loginWithToken } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const autoLoginAttempted = useRef(false)
 
   useEffect(() => {
-    if (autoLoginAttempted.current || session || !DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD || !DEV_AUTO_LOGIN_ROLE) return
+    if (autoLoginAttempted.current || session || !DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD) return
     autoLoginAttempted.current = true
-    void requestLocalDevelopmentToken(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_ROLE, DEV_AUTO_LOGIN_PASSWORD)
-      .then((idToken) => loginWithIdentityToken(idToken))
+    // NOTE: Auto-login uses the same email/password contract as manual local auth.
+    // Role is inferred from the account and JWT claims during sign-in.
+    void requestLocalDevelopmentToken(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_PASSWORD)
+      .then((idToken) => loginWithToken(idToken))
       .catch(() => { /* backend not ready yet — user can log in manually */ })
-  }, [session, loginWithIdentityToken])
-  const isStaff = session?.role === 'Admin' || session?.role === 'SocialWorker'
+  }, [session, loginWithToken])
+
+  // Read theme cookie on mount and apply saved preference.
+  useEffect(() => {
+    const match = document.cookie.split('; ').find((c) => c.startsWith('sh-theme='))
+    const saved = match?.split('=')[1]
+    if (saved === 'dark' || saved === 'light') {
+      setTheme(saved)
+      document.documentElement.setAttribute('data-theme', saved)
+    }
+  }, [])
+
+  // GDPR-gated analytics: only track page views when the user has given analytics consent.
+  useEffect(() => {
+    const raw = localStorage.getItem('safeharbor-cookie-consent')
+    if (!raw) return
+    try {
+      const consent = JSON.parse(raw) as { analytics?: boolean }
+      if (consent.analytics) {
+        const prev = Number(sessionStorage.getItem('sh-pageviews') ?? '0')
+        sessionStorage.setItem('sh-pageviews', String(prev + 1))
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  function toggleTheme() {
+    const next = theme === 'light' ? 'dark' : 'light'
+    setTheme(next)
+    document.documentElement.setAttribute('data-theme', next)
+    document.cookie = `sh-theme=${next}; path=/; SameSite=Lax; max-age=31536000`
+  }
   const isDonor = session?.role === 'Donor'
+  const role = session?.role
 
   // Build the navigation list based on the logged-in role.
   // - Visitors (no session): see public pages including /donate.
@@ -35,23 +67,14 @@ function App() {
     { to: '/donate', label: 'Donate' },
 
     // Staff-only nav links — hidden from donors and visitors.
-    ...(isStaff
-      ? [
-          { to: '/app/dashboard', label: 'Admin Dashboard' },
-          { to: '/app/donors', label: 'Manage Contributions' },
-          { to: '/app/donor-analytics', label: 'Donor Analytics' },
-          { to: '/app/caseload', label: 'Caseload' },
-          { to: '/app/process-recording', label: 'Process Recording' },
-          { to: '/app/visitation-conferences', label: 'Visitation & Conferences' },
-          { to: '/app/reports', label: 'Reports' },
-          { to: '/app/social-media', label: 'Social Media Strategy' },
-          { to: '/privacy', label: 'Privacy' },
-        ]
+    ...(role
+      ? appNavRoutes.filter((route) => route.roles?.includes(role)).map(({ to, label }) => ({ to, label }))
       : []),
 
     // Donor-only nav link — shown only when logged in as a Donor.
     ...(isDonor ? [{ to: '/donor/dashboard', label: 'My Donations' }] : []),
 
+    { to: '/privacy', label: 'Privacy' },
     { to: '/login', label: session ? 'Switch User' : 'Login' },
   ]
 
@@ -101,6 +124,9 @@ function App() {
             </Link>
           </div>
           <div className="header-actions">
+            <button type="button" className="button button-secondary" onClick={toggleTheme}>
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
             {session && (
               <button type="button" className="button button-secondary" onClick={logout}>
                 Sign out ({session.role})

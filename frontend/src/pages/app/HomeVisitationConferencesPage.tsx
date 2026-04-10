@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchPreviousConferences, fetchUpcomingConferences, fetchVisitLogs } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
+import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import type { CaseConferenceItem, HomeVisitItem } from '../../types/adminOperations'
 
 export function HomeVisitationConferencesPage() {
@@ -29,7 +31,7 @@ export function HomeVisitationConferencesPage() {
           setError(null)
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load visitation/conference data')
+        if (!cancelled) setError(toUserFacingError(err, 'Failed to load visitation/conference data'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -45,7 +47,7 @@ export function HomeVisitationConferencesPage() {
       <p className="lead">Maintain visit logs and review upcoming and previous case conferences.</p>
       <input placeholder="Resident case ID filter" value={residentCaseId} onChange={(e) => setResidentCaseId(e.target.value)} />
       {loading && <p role="status">Loading visitation and conference data…</p>}
-      {error && <p role="alert">{error}</p>}
+      {error && <ApiErrorNotice error={error} />}
       {!loading && !error && (
         <div className="feature-grid">
           <article className="feature-card"><h2>Visit logs</h2><ul>{visits.map(v => <li key={v.id}>{new Date(v.visitDate).toLocaleDateString()} · {v.visitType} · {v.status}</li>)}</ul></article>

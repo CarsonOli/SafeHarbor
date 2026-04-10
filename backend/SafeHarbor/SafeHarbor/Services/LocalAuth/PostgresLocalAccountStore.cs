@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Npgsql;
-using SafeHarbor.Controllers.Public;
+using SafeHarbor.Services.Auth;
 
 namespace SafeHarbor.Services.LocalAuth;
 
@@ -21,7 +21,9 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         return connection;
     }
 
-    public bool TryCreateAccount(RegisterRequest request, out string? error)
+    // NOTE: This class persists auth accounts directly for local auth workflows.
+    // It consumes the shared auth DTOs to avoid coupling to controller-local request types.
+    public bool TryCreateAccount(RegisterAuthRequest request, out string? error)
     {
         error = ValidateRequest(request.Email, request.Role, request.Password);
         if (error is not null) return false;
@@ -47,20 +49,22 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         }
     }
 
-    public bool TryValidateCredentials(LoginRequest request, out LocalAccountRecord? account, out string? error)
+    public bool TryValidateCredentials(LoginAuthRequest request, out LocalAccountRecord? account, out string? error)
     {
         account = null;
         error = ValidateRequest(request.Email, request.Role, request.Password);
         if (error is not null) return false;
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedRole = request.Role!.Trim();
         var passwordHash = HashPassword(request.Password);
 
         using var connection = OpenConnection();
         using var cmd = new NpgsqlCommand(
             "SELECT email, role, password_hash FROM auth_accounts WHERE email = @email AND role = @role", connection);
         cmd.Parameters.AddWithValue("email", normalizedEmail);
-        cmd.Parameters.AddWithValue("role", request.Role);
+        // NOTE: ValidateRequest guarantees role is non-empty and whitelisted before this query.
+        cmd.Parameters.AddWithValue("role", normalizedRole);
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -80,10 +84,10 @@ public sealed class PostgresLocalAccountStore(IConfiguration configuration) : IL
         return true;
     }
 
-    private static string? ValidateRequest(string email, string role, string password)
+    private static string? ValidateRequest(string email, string? role, string password)
     {
         if (string.IsNullOrWhiteSpace(email)) return "Email is required.";
-        if (!AllowedRoles.Contains(role)) return $"Role must be one of: {string.Join(", ", AllowedRoles)}.";
+        if (string.IsNullOrWhiteSpace(role) || !AllowedRoles.Contains(role)) return $"Role must be one of: {string.Join(", ", AllowedRoles)}.";
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8) return "Password is required and must be at least 8 characters.";
         return null;
     }

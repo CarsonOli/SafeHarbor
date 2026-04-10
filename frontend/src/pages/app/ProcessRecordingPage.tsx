@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { createProcessRecording, fetchProcessRecordings, fetchResidentCases } from '../../services/adminOperationsApi'
+import { toUserFacingError } from '../../services/httpErrors'
 import type { ProcessRecordItem, ResidentCaseListItem } from '../../types/adminOperations'
 
 const EMOTIONAL_STATES = ['Angry', 'Distressed', 'Anxious', 'Hopeful', 'Happy', 'Calm', 'Sad', 'Withdrawn']
@@ -206,7 +207,7 @@ export function ProcessRecordingPage() {
         setError(null)
       } catch (err) {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Failed to load recordings')
+        setError(toUserFacingError(err, 'Failed to load recordings'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -267,7 +268,7 @@ export function ProcessRecordingPage() {
       setItems(data.items)
       setTotalCount(data.totalCount)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save recording')
+      setError(toUserFacingError(err, 'Failed to save recording'))
     } finally {
       setSubmitting(false)
     }
@@ -434,7 +435,6 @@ export function ProcessRecordingPage() {
         </div>
 
         {loading && <p role="status">Loading sessions…</p>}
-
         {!loading && !error && (
           <>
             {visibleItems.length === 0 ? (

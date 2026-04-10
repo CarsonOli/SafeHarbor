@@ -17,9 +17,9 @@ import { ReportsAnalyticsPage } from './pages/app/ReportsAnalyticsPage'
 import { YourDonationsPage } from './pages/donor/YourDonationsPage'
 import { AdminDonorAnalyticsPage } from './pages/app/AdminDonorAnalyticsPage'
 import { DonatePage } from './pages/DonatePage'
+import { DonorsContributionsPage } from './pages/app/DonorsContributionsPage'
 import AdminContributionsPage from './pages/app/AdminContributionsPage'
-import SocialMediaStrategy from './pages/SocialMediaStrategy';
-
+import SocialMediaStrategy from './pages/SocialMediaStrategy'
 
 export const appRoutes = [
   {
@@ -48,10 +48,18 @@ export const appRoutes = [
         element: <ProtectedRoute allowedRoles={['Admin', 'SocialWorker']} />,
         children: [
           { path: 'dashboard', element: <AdminDashboardPage /> },
-          { path: 'donors', element: <AdminContributionsPage /> },
-          { path: 'donor-analytics', element: <AdminDonorAnalyticsPage /> },
+          { path: 'donors', element: <DonorsContributionsPage /> },
+          {
+            path: 'donor-analytics',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <AdminDonorAnalyticsPage /> }],
+          },
           { path: 'caseload', element: <CaseloadInventoryPage /> },
-          { path: 'contributions', element: <AdminContributionsPage /> },
+          {
+            path: 'contributions',
+            element: <ProtectedRoute allowedRoles={['Admin']} />,
+            children: [{ index: true, element: <AdminContributionsPage /> }],
+          },
           {
             path: 'process-recording',
             element: <ProtectedRoute allowedRoles={['SocialWorker']} />,

@@ -2,37 +2,51 @@
 
 ## Local auth setup
 
-The login page expects identity-provider environment variables in `frontend/.env.local`.
-Copy `frontend/.env.example` and fill in your tenant values:
+The login page uses a single email/password flow against the backend auth endpoint (`POST /api/auth/login`).
+Copy `frontend/.env.example` to `frontend/.env.local` before running locally:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Required variables:
+Common local settings:
 
-- `VITE_AUTH_AUTHORIZE_URL`
-- `VITE_AUTH_CLIENT_ID`
-
-If you want full local end-to-end auth (without Entra tenant setup), use:
-
-- `VITE_AUTH_MODE=local`
 - `VITE_API_BASE_URL=https://localhost:7217` (or your backend local URL)
+- `VITE_ENABLE_DEV_ROLE_SIMULATION=true` (optional, for non-login role testing UI if needed)
 
-In that mode, `/login` uses the backend local auth endpoint (`POST /api/auth/local-login`) to get a signed JWT for local testing. The backend switch is controlled by `LocalAuth:Enabled` in `backend/SafeHarbor/SafeHarbor/appsettings.Development.json`.
+The backend switch is controlled by `LocalAuth:Enabled` in `backend/SafeHarbor/SafeHarbor/appsettings.Development.json`.
 
-### Local account workflow
+For deployed environments, either set `VITE_API_BASE_URL` to your backend API host or configure your static host to proxy
+`/api/*` requests. Without one of those, auth requests can land on the frontend host and return `404/405` instead of reaching
+the API.
 
-When `VITE_AUTH_MODE=local` is enabled, the login page now supports:
+As a safety net for Azure Static Web Apps deployments, local auth also falls back to known backend App Service hosts
+when no `VITE_API_BASE_URL` is provided and same-origin `/api/*` returns `404/405`, including
+`https://safeharborbackend-ggdyhzdggag9d3df.canadacentral-01.azurewebsites.net`.
+Set `VITE_API_BASE_URL` in CI/CD to the correct backend host for each environment.
 
-- **Sign in locally** using an existing local account.
-- **Create a new account** (stored in backend memory only) and sign in immediately.
-
-Seeded local accounts are also available for quick smoke testing:
+Seeded local accounts are available for smoke testing:
 
 - `alice@example.com` / `Password123!` (Donor)
 - `admin@safeharbor.local` / `Password123!` (Admin)
 
+## API fallback policy (deployment safety)
+
+Frontend mock fallbacks are **dev-only and opt-in**. This prevents deployment builds from silently shipping fallback/mock payload behavior when backend endpoints fail.
+
+Current fallback flags:
+
+- `VITE_ENABLE_DONOR_DASHBOARD_DEV_FALLBACK`
+- `VITE_ENABLE_DONOR_ANALYTICS_DEV_FALLBACK`
+- `VITE_ENABLE_IMPACT_DEV_FALLBACK`
+
+Policy requirements:
+
+- Keep all fallback flags unset or `false` in CI/CD and deployed environments.
+- Only enable fallback flags in local development (`.env.local`) when intentionally running frontend without a backend.
+- If a backend endpoint is unavailable in deployed environments, UI should show an explicit API error (including endpoint + HTTP status) rather than rendering seeded/mock data.
+
+This policy ensures missing integrations are visible during QA and release validation.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

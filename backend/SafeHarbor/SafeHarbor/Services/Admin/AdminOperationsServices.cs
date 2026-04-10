@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using System.Globalization;
 using SafeHarbor.Data;
 using SafeHarbor.DTOs;
 using SafeHarbor.Models.Entities;
@@ -489,65 +491,143 @@ public sealed class DonorContributionService(SafeHarborDbContext db) : IDonorCon
 
 public sealed class ReportsAnalyticsService(SafeHarborDbContext db) : IReportsAnalyticsService
 {
+    private static readonly HashSet<string> ReintegrationSuccessStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "success",
+        "successful",
+        "completed",
+        "stable",
+        "reintegrated"
+    };
+
     public async Task<ReportsAnalyticsResponse> GetAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var sixMonthsAgo = now.AddMonths(-5);
 
-        var donations = await db.Contributions.AsNoTracking()
-            .Where(x => x.ContributionDate >= sixMonthsAgo)
-            .ToArrayAsync(ct);
+        var donations = await TryReadOptionalAnalyticsDataAsync(
+            () => db.Contributions.AsNoTracking()
+                .Where(x => x.ContributionDate >= sixMonthsAgo)
+                // NOTE: Use a narrow projection so this report can keep serving when unrelated
+                // columns are added in newer DB migrations that are not yet applied.
+                .Select(x => new DonationAnalyticsRow(x.ContributionDate, x.Amount))
+                .ToArrayAsync(ct));
 
-        var visits = await db.HomeVisits.AsNoTracking()
-            .Where(x => x.VisitDate >= sixMonthsAgo)
-            .ToArrayAsync(ct);
+        var visits = await TryReadOptionalAnalyticsDataAsync(
+            () => db.HomeVisits.AsNoTracking()
+                .Where(x => x.VisitDate >= sixMonthsAgo)
+                .Select(x => new HomeVisitAnalyticsRow(x.VisitDate))
+                .ToArrayAsync(ct));
 
-        var residentCases = await db.ResidentCases.AsNoTracking().Include(x => x.Safehouse).ToArrayAsync(ct);
-        var allocations = await db.Set<ContributionAllocation>().AsNoTracking().ToArrayAsync(ct);
+        var residentCases = await TryReadOptionalAnalyticsDataAsync(
+            () => db.ResidentCases.AsNoTracking()
+                .Select(x => new ResidentCaseAnalyticsRow(
+                    x.SafehouseId,
+                    x.Safehouse != null ? x.Safehouse.Name : null,
+                    x.OpenedAt,
+                    x.ClosedAt))
+                .ToArrayAsync(ct));
+        var allocations = await TryReadOptionalAnalyticsDataAsync(
+            () => db.Set<ContributionAllocation>().AsNoTracking()
+                .Select(x => new ContributionAllocationAnalyticsRow(x.SafehouseId, x.AmountAllocated))
+                .ToArrayAsync(ct));
 
         var donationTrends = donations
             .GroupBy(x => x.ContributionDate.ToString("yyyy-MM"))
             .OrderBy(x => x.Key)
             .Select(x => new DonationTrendPoint(x.Key, x.Sum(v => v.Amount)))
             .ToArray();
+        if (donationTrends.Length == 0)
+        {
+            donationTrends = await LoadLegacyDonationTrendsAsync(ct);
+        }
 
         var outcomeTrends = visits
             .GroupBy(x => x.VisitDate.ToString("yyyy-MM"))
             .OrderBy(x => x.Key)
             .Select(x => new OutcomeTrendPoint(x.Key, residentCases.Count(rc => rc.OpenedAt.ToString("yyyy-MM") == x.Key), x.Count()))
             .ToArray();
+        if (outcomeTrends.Length == 0)
+        {
+            outcomeTrends = await LoadLegacyOutcomeTrendsAsync(ct);
+        }
 
         var safehouseComparisons = residentCases
             .GroupBy(x => x.SafehouseId)
             .Select(g =>
             {
-                var safehouseName = g.First().Safehouse?.Name ?? "Unknown";
+                var safehouseName = g.First().SafehouseName ?? "Unknown";
                 var allocationTotal = allocations.Where(a => a.SafehouseId == g.Key).Sum(a => a.AmountAllocated);
                 return new SafehouseComparisonItem(safehouseName, g.Count(x => x.ClosedAt == null), allocationTotal);
             })
             .OrderByDescending(x => x.AllocatedFunding)
             .ToArray();
+        if (safehouseComparisons.Length == 0)
+        {
+            safehouseComparisons = await LoadLegacySafehouseComparisonsAsync(ct);
+        }
 
-        var posts = await db.SocialPostMetrics.AsNoTracking().ToArrayAsync(ct);
+        var posts = await TryReadOptionalAnalyticsDataAsync(
+            () => db.SocialPostMetrics.AsNoTracking()
+                .Select(x => new SocialPostAnalyticsRow(
+                    x.Id,
+                    x.PostedAt,
+                    x.Platform,
+                    x.ContentType,
+                    x.Reach,
+                    x.Engagements,
+                    x.AttributedDonationAmount,
+                    x.AttributedDonationCount))
+                .ToArrayAsync(ct));
 
-        var platform = BuildCorrelation(posts, x => x.Platform);
-        var contentType = BuildCorrelation(posts, x => x.ContentType);
-        var postingHour = BuildCorrelation(posts, x => x.PostedAt.Hour.ToString("00") + ":00");
+        SocialDonationCorrelationPoint[] platform;
+        SocialDonationCorrelationPoint[] contentType;
+        SocialDonationCorrelationPoint[] postingHour;
+        SocialPostDonationInsight[] topPosts;
 
-        var topPosts = posts
-            .OrderByDescending(x => x.AttributedDonationAmount ?? 0)
-            .Take(5)
-            .Select(x => new SocialPostDonationInsight(
-                x.Id,
-                x.PostedAt,
-                x.Platform,
-                x.ContentType,
-                x.Reach,
-                x.Engagements,
-                x.AttributedDonationAmount,
-                x.AttributedDonationCount,
-                x.Reach > 0 ? Math.Round((decimal)x.Engagements / x.Reach * 100m, 2) : 0m))
-            .ToArray();
+        if (posts.Length > 0)
+        {
+            platform = BuildCorrelation(posts, x => x.Platform);
+            contentType = BuildCorrelation(posts, x => x.ContentType);
+            postingHour = BuildCorrelation(posts, x => x.PostedAt.Hour.ToString("00") + ":00");
+            topPosts = posts
+                .OrderByDescending(x => x.AttributedDonationAmount ?? 0)
+                .Take(5)
+                .Select(x => new SocialPostDonationInsight(
+                    x.Id,
+                    x.PostedAt,
+                    x.Platform,
+                    x.ContentType,
+                    x.Reach,
+                    x.Engagements,
+                    x.AttributedDonationAmount,
+                    x.AttributedDonationCount,
+                    x.Reach > 0 ? Math.Round((decimal)x.Engagements / x.Reach * 100m, 2) : 0m))
+                .ToArray();
+        }
+        else
+        {
+            var legacySocialRows = await LoadLegacySocialRowsAsync(ct);
+            platform = BuildCorrelation(legacySocialRows, x => x.Platform);
+            contentType = BuildCorrelation(legacySocialRows, x => x.ContentType);
+            postingHour = BuildCorrelation(legacySocialRows, x => x.PostedAt.Hour.ToString("00") + ":00");
+            topPosts = legacySocialRows
+                .OrderByDescending(x => x.AttributedDonationAmount ?? 0)
+                .Take(5)
+                .Select(x => new SocialPostDonationInsight(
+                    x.Id,
+                    x.PostedAt,
+                    x.Platform,
+                    x.ContentType,
+                    x.Reach,
+                    x.Engagements,
+                    x.AttributedDonationAmount,
+                    x.AttributedDonationCount,
+                    x.Reach > 0 ? Math.Round((decimal)x.Engagements / x.Reach * 100m, 2) : 0m))
+                .ToArray();
+        }
+
+        var reintegrationRates = await LoadLegacyReintegrationRatesAsync(ct);
 
         var recommendations = new List<ContentTimingRecommendationCard>();
         var bestPlatform = platform.OrderByDescending(x => x.TotalAttributedDonationAmount).FirstOrDefault();
@@ -563,7 +643,7 @@ public sealed class ReportsAnalyticsService(SafeHarborDbContext db) : IReportsAn
             donationTrends,
             outcomeTrends,
             safehouseComparisons,
-            Array.Empty<ReintegrationRatePoint>(),
+            reintegrationRates,
             platform,
             contentType,
             postingHour,
@@ -571,7 +651,21 @@ public sealed class ReportsAnalyticsService(SafeHarborDbContext db) : IReportsAn
             recommendations);
     }
 
-    private static SocialDonationCorrelationPoint[] BuildCorrelation(IEnumerable<SocialPostMetric> metrics, Func<SocialPostMetric, string> groupBy)
+    // NOTE: Reports analytics is optional in partially-migrated environments.
+    // Missing table/column errors should degrade to empty report slices instead of 500.
+    private static async Task<T[]> TryReadOptionalAnalyticsDataAsync<T>(Func<Task<T[]>> query)
+    {
+        try
+        {
+            return await query();
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable || ex.SqlState == PostgresErrorCodes.UndefinedColumn)
+        {
+            return Array.Empty<T>();
+        }
+    }
+
+    private static SocialDonationCorrelationPoint[] BuildCorrelation(IEnumerable<SocialPostAnalyticsRow> metrics, Func<SocialPostAnalyticsRow, string> groupBy)
     {
         return metrics
             .GroupBy(groupBy)
@@ -588,4 +682,263 @@ public sealed class ReportsAnalyticsService(SafeHarborDbContext db) : IReportsAn
             .OrderByDescending(x => x.TotalAttributedDonationAmount)
             .ToArray();
     }
+
+    private async Task<DonationTrendPoint[]> LoadLegacyDonationTrendsAsync(CancellationToken ct)
+    {
+        var relation = await ResolveRelationAsync(["lighthouse.donations", "public.donations"], ct);
+        if (relation is null)
+        {
+            return [];
+        }
+
+        var sql = $"""
+            SELECT to_char(date_trunc('month', donation_date), 'YYYY-MM') AS month_key,
+                   COALESCE(SUM(COALESCE(amount, 0)), 0) AS total_amount
+            FROM {relation}
+            WHERE donation_date IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+            """;
+
+        return await ExecuteReadAsync(sql, reader =>
+        {
+            var month = reader.GetString(0);
+            var amount = reader.IsDBNull(1) ? 0m : reader.GetDecimal(1);
+            return new DonationTrendPoint(month, amount);
+        }, ct);
+    }
+
+    private async Task<OutcomeTrendPoint[]> LoadLegacyOutcomeTrendsAsync(CancellationToken ct)
+    {
+        var metricsRelation = await ResolveRelationAsync(["lighthouse.safehouse_monthly_metrics", "public.safehouse_monthly_metrics"], ct);
+        if (metricsRelation is not null)
+        {
+            var sql = $"""
+                SELECT to_char(month_start, 'YYYY-MM') AS month_key,
+                       COALESCE(SUM(active_residents), 0) AS residents_served,
+                       COALESCE(SUM(home_visitation_count), 0) AS home_visit_count
+                FROM {metricsRelation}
+                WHERE month_start IS NOT NULL
+                GROUP BY 1
+                ORDER BY 1
+                """;
+
+            return await ExecuteReadAsync(sql, reader => new OutcomeTrendPoint(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                reader.IsDBNull(2) ? 0 : reader.GetInt32(2)), ct);
+        }
+
+        var visitRelation = await ResolveRelationAsync(["lighthouse.home_visitations", "public.home_visitations"], ct);
+        if (visitRelation is null)
+        {
+            return [];
+        }
+
+        var fallbackSql = $"""
+            SELECT to_char(date_trunc('month', visit_date), 'YYYY-MM') AS month_key,
+                   0 AS residents_served,
+                   COUNT(*)::int AS home_visit_count
+            FROM {visitRelation}
+            WHERE visit_date IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+            """;
+
+        return await ExecuteReadAsync(fallbackSql, reader => new OutcomeTrendPoint(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+            reader.IsDBNull(2) ? 0 : reader.GetInt32(2)), ct);
+    }
+
+    private async Task<SafehouseComparisonItem[]> LoadLegacySafehouseComparisonsAsync(CancellationToken ct)
+    {
+        var metricsRelation = await ResolveRelationAsync(["lighthouse.safehouse_monthly_metrics", "public.safehouse_monthly_metrics"], ct);
+        var safehouseRelation = await ResolveRelationAsync(["lighthouse.safehouses", "public.safehouses"], ct);
+        if (metricsRelation is null || safehouseRelation is null)
+        {
+            return [];
+        }
+
+        var sql = $"""
+            WITH latest AS (
+                SELECT MAX(month_start) AS latest_month
+                FROM {metricsRelation}
+            )
+            SELECT
+                COALESCE(s.name, 'Unknown') AS safehouse_name,
+                COALESCE(m.active_residents, 0) AS active_residents,
+                0::numeric AS allocated_funding
+            FROM {metricsRelation} m
+            JOIN latest l ON m.month_start = l.latest_month
+            LEFT JOIN {safehouseRelation} s ON s.safehouse_id = m.safehouse_id
+            ORDER BY active_residents DESC
+            """;
+
+        return await ExecuteReadAsync(sql, reader => new SafehouseComparisonItem(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+            reader.IsDBNull(2) ? 0m : reader.GetDecimal(2)), ct);
+    }
+
+    private async Task<ReintegrationRatePoint[]> LoadLegacyReintegrationRatesAsync(CancellationToken ct)
+    {
+        var residentRelation = await ResolveRelationAsync(["lighthouse.residents", "public.residents"], ct);
+        if (residentRelation is null)
+        {
+            return [];
+        }
+
+        var sql = $"""
+            SELECT
+                to_char(date_trunc('month', date_closed), 'YYYY-MM') AS month_key,
+                COALESCE(
+                    100.0 * SUM(
+                        CASE WHEN lower(COALESCE(reintegration_status, '')) = ANY(@success_statuses) THEN 1 ELSE 0 END
+                    ) / NULLIF(COUNT(*), 0),
+                    0
+                ) AS rate_percent
+            FROM {residentRelation}
+            WHERE date_closed IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+            """;
+
+        var parameters = new Dictionary<string, object>
+        {
+            ["success_statuses"] = ReintegrationSuccessStatuses.Select(x => x.ToLowerInvariant()).ToArray()
+        };
+
+        return await ExecuteReadAsync(sql, reader => new ReintegrationRatePoint(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? 0m : Math.Round(reader.GetDecimal(1), 2)), ct, parameters);
+    }
+
+    private async Task<SocialPostAnalyticsRow[]> LoadLegacySocialRowsAsync(CancellationToken ct)
+    {
+        var relation = await ResolveRelationAsync(["lighthouse.social_media_posts", "public.social_media_posts"], ct);
+        if (relation is null)
+        {
+            return [];
+        }
+
+        var sql = $"""
+            SELECT
+                post_id,
+                COALESCE(created_at, CURRENT_TIMESTAMP),
+                COALESCE(platform, 'Unknown'),
+                COALESCE(post_type, 'Unknown'),
+                COALESCE(reach, 0),
+                COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0) + COALESCE(saves, 0) + COALESCE(click_throughs, 0),
+                COALESCE(estimated_donation_value_php, 0),
+                COALESCE(donation_referrals, 0)
+            FROM {relation}
+            """;
+
+        return await ExecuteReadAsync(sql, reader =>
+        {
+            var legacyPostId = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+            var postedAt = reader.IsDBNull(1)
+                ? DateTimeOffset.UtcNow
+                : DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc);
+            var platform = reader.GetString(2);
+            var contentType = reader.GetString(3);
+            var reach = reader.IsDBNull(4) ? 0 : reader.GetInt32(4);
+            var engagements = reader.IsDBNull(5) ? 0 : reader.GetInt32(5);
+            var amount = reader.IsDBNull(6) ? 0m : reader.GetDecimal(6);
+            var referrals = reader.IsDBNull(7) ? 0 : reader.GetInt32(7);
+
+            // Keep deterministic IDs for UI keys when source data comes from legacy integer post IDs.
+            var normalizedGuid = Guid.TryParseExact($"00000000-0000-0000-0000-{legacyPostId:000000000000}", "D", out var parsed)
+                ? parsed
+                : Guid.Empty;
+
+            return new SocialPostAnalyticsRow(normalizedGuid, postedAt, platform, contentType, reach, engagements, amount, referrals);
+        }, ct);
+    }
+
+    private async Task<string?> ResolveRelationAsync(string[] candidates, CancellationToken ct)
+    {
+        foreach (var relation in candidates)
+        {
+            var parts = relation.Split('.', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+
+            if (await RelationExistsAsync(parts[0], parts[1], ct))
+            {
+                return relation;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<bool> RelationExistsAsync(string schema, string table, CancellationToken ct)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return false;
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema AND table_name = @table)",
+            conn);
+        cmd.Parameters.AddWithValue("schema", schema);
+        cmd.Parameters.AddWithValue("table", table);
+        var scalar = await cmd.ExecuteScalarAsync(ct);
+        return scalar is bool exists && exists;
+    }
+
+    private async Task<T[]> ExecuteReadAsync<T>(
+        string sql,
+        Func<NpgsqlDataReader, T> map,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, object>? parameters = null)
+    {
+        var connString = db.Database.GetConnectionString();
+        if (string.IsNullOrWhiteSpace(connString))
+        {
+            return [];
+        }
+
+        await using var conn = new NpgsqlConnection(connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        if (parameters is not null)
+        {
+            foreach (var (name, value) in parameters)
+            {
+                cmd.Parameters.AddWithValue(name, value);
+            }
+        }
+
+        var results = new List<T>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(map(reader));
+        }
+
+        return [.. results];
+    }
+
+    private sealed record DonationAnalyticsRow(DateTimeOffset ContributionDate, decimal Amount);
+    private sealed record HomeVisitAnalyticsRow(DateTimeOffset VisitDate);
+    private sealed record ResidentCaseAnalyticsRow(Guid SafehouseId, string? SafehouseName, DateTimeOffset OpenedAt, DateTimeOffset? ClosedAt);
+    private sealed record ContributionAllocationAnalyticsRow(Guid SafehouseId, decimal AmountAllocated);
+    private sealed record SocialPostAnalyticsRow(
+        Guid Id,
+        DateTimeOffset PostedAt,
+        string Platform,
+        string ContentType,
+        int Reach,
+        int Engagements,
+        decimal? AttributedDonationAmount,
+        int? AttributedDonationCount);
 }
