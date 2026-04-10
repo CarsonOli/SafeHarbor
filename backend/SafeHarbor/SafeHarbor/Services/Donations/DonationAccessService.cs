@@ -54,9 +54,8 @@ public sealed class DonationAccessService(
         }
 
         await using var conn = await OpenConnectionAsync(ct);
-        var hasFrequencyColumn = await ColumnExistsAsync(conn, "lighthouse", "donations", "frequency", ct);
-        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value, hasFrequencyColumn);
-        var donations = await ReadDonationsAsync(conn, query.Sql, query.Parameters, ct);
+        var query = BuildCurrentUserDonationHistoryQuery(user.SupporterId.Value);
+        var donations = await ReadCurrentUserDonationsAsync(conn, query.Sql, query.Parameters, ct);
 
         var supporterDisplayName = donations.FirstOrDefault()?.DonorDisplayName;
         return new YourDonationsResponse(true, user.SupporterId, supporterDisplayName, donations);
@@ -490,49 +489,65 @@ public sealed class DonationAccessService(
         return (sql, new Dictionary<string, object> { ["donation_id"] = donationId });
     }
 
-    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(
-        long supporterId,
-        bool hasFrequencyColumn)
+    private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildCurrentUserDonationHistoryQuery(long supporterId)
     {
-        // The "Your Donations" page is an account ledger view, so it must return complete
-        // supporter history rather than paginated admin-style slices.
-        // NOTE: Some production datasets are missing donations.frequency; emit NULL when absent.
-        var frequencyProjection = hasFrequencyColumn ? "d.frequency" : "NULL::text AS frequency";
-        var sql = $$"""
-            {{BaseDonationProjection()}}
+        // Keep the donor-facing ledger query minimal and resilient:
+        // only columns required for historical donation timeline are read.
+        const string sql = """
+            SELECT
+                d.donation_id,
+                d.donation_date,
+                COALESCE(d.donation_type, 'Unknown') AS donation_type,
+                COALESCE(d.amount, 0) AS amount,
+                d.supporter_id,
+                s.display_name
+            FROM lighthouse.donations d
+            JOIN lighthouse.supporters s ON s.supporter_id = d.supporter_id
             WHERE d.supporter_id = @supporter_id
-            ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC, i.item_id
+            ORDER BY d.donation_date DESC NULLS LAST, d.donation_id DESC
             """;
-        sql = sql.Replace("d.frequency,", $"{frequencyProjection},", StringComparison.Ordinal);
 
         return (sql, new Dictionary<string, object> { ["supporter_id"] = supporterId });
     }
 
-    private static async Task<bool> ColumnExistsAsync(
+    private static async Task<IReadOnlyCollection<DonationListItem>> ReadCurrentUserDonationsAsync(
         NpgsqlConnection conn,
-        string schema,
-        string table,
-        string column,
+        string sql,
+        IReadOnlyDictionary<string, object> parameters,
         CancellationToken ct)
     {
-        const string sql = """
-            SELECT EXISTS (
-              SELECT 1
-              FROM information_schema.columns
-              WHERE table_schema = @schema AND table_name = @table AND column_name = @column
-            )
-            """;
+        var items = new List<DonationListItem>();
 
-        return await ExecuteScalarAsync<bool>(
-            conn,
-            sql,
-            new Dictionary<string, object>
-            {
-                ["schema"] = schema,
-                ["table"] = table,
-                ["column"] = column
-            },
-            ct);
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        AddParameters(cmd, parameters);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var donationId = reader.GetInt64(0);
+            var donationDate = GetDateTimeOffsetOrNull(reader, 1);
+            var donationType = GetStringOrEmpty(reader, 2);
+            var amount = GetDecimalOrZero(reader, 3);
+            var supporterId = reader.GetInt64(4);
+            var displayName = GetStringOrNull(reader, 5);
+
+            items.Add(new DonationListItem(
+                donationId,
+                donationDate,
+                donationType,
+                amount,
+                0m,
+                null,
+                null,
+                null,
+                null,
+                supporterId,
+                string.IsNullOrWhiteSpace(displayName) ? "Unknown supporter" : displayName,
+                null,
+                null,
+                []));
+        }
+
+        return items;
     }
 
     private static (string Sql, IReadOnlyDictionary<string, object> Parameters) BuildDonationQuery(NormalizedDonationFilters filters, long? scopedSupporterId)
