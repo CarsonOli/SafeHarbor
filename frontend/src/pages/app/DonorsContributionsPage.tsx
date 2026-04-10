@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+ï»¿import { useEffect, useMemo, useState } from 'react'
 import { ApiErrorNotice } from '../../components/ApiErrorNotice'
 import { fetchAllDonations } from '../../services/donationsApi'
 import { toUserFacingError } from '../../services/httpErrors'
@@ -202,8 +202,8 @@ export function DonorsContributionsPage() {
                       {donation.supporterEmail ? <div>{donation.supporterEmail}</div> : null}
                     </td>
                     <td>{donation.donationType}</td>
-                    <td>{donation.campaignName ?? '—'}</td>
-                    <td>{donation.channelSource ?? '—'}</td>
+                    <td>{donation.campaignName ?? '-'}</td>
+                    <td>{donation.channelSource ?? '-'}</td>
                     <td>{formatCurrency(donation.amount)}</td>
                     <td>{formatCurrency(donation.estimatedValue)}</td>
                   </tr>
