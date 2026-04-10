@@ -14,7 +14,8 @@ namespace SafeHarbor.Services.Auth;
 public sealed class AuthService(
     SafeHarborDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
-    IOptions<PasswordPolicyOptions> passwordPolicyOptions) : IAuthService
+    IOptions<PasswordPolicyOptions> passwordPolicyOptions,
+    IDomainProfileProvisioningService domainProfileProvisioningService) : IAuthService
 {
     private static readonly HashSet<string> SupportedDatabaseRoles =
         ["admin", "staff", "user"];
@@ -80,10 +81,20 @@ public sealed class AuthService(
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         dbContext.Users.Add(user);
+        await domainProfileProvisioningService.EnsureProvisionedForUserAsync(
+            user.UserId,
+            user.Email,
+            user.Role,
+            user.FirstName,
+            user.LastName,
+            cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new AuthRegisterResult(true);
     }
+
+    public Task<DomainProfileReconciliationResult> ReconcileDomainProfilesAsync(CancellationToken cancellationToken = default) =>
+        domainProfileProvisioningService.ReconcileAllAsync(cancellationToken);
 
     public async Task<AuthAuthenticateResult> AuthenticateAsync(LoginAuthRequest request, CancellationToken cancellationToken = default)
     {

@@ -189,6 +189,7 @@ builder.Services.AddScoped<IPublicRecordsService, PublicRecordsService>();
 builder.Services.AddScoped<IDonorDashboardService, DonorDashboardService>();
 builder.Services.AddScoped<IDonorAnalyticsService, DonorAnalyticsService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDomainProfileProvisioningService, DomainProfileProvisioningService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
 

@@ -18,6 +18,8 @@ namespace SafeHarbor.Data
 
         public DbSet<User> Users { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
+        public DbSet<UserRole> UserRoles { get; set; }
+        public DbSet<Role> Roles { get; set; }
         public DbSet<StatusState> StatusState { get; set; }
 
         // --- The Rest of the 17 ---
