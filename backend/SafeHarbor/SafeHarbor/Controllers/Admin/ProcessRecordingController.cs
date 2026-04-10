@@ -18,7 +18,7 @@ public sealed class ProcessRecordingController(IProcessRecordingService processR
     }
 
     [HttpPost]
-    [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
+    [Authorize(Policy = PolicyNames.StaffOrAdmin)]
     public async Task<ActionResult<ProcessRecordItem>> Create([FromBody] CreateProcessRecordRequest request, CancellationToken ct)
     {
         var created = await processRecordingService.CreateAsync(request, ct);
@@ -26,7 +26,7 @@ public sealed class ProcessRecordingController(IProcessRecordingService processR
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
+    [Authorize(Policy = PolicyNames.StaffOrAdmin)]
     public async Task<ActionResult<ProcessRecordItem>> Update(Guid id, [FromBody] CreateProcessRecordRequest request, CancellationToken ct)
     {
         var updated = await processRecordingService.UpdateAsync(id, request, ct);
@@ -39,7 +39,7 @@ public sealed class ProcessRecordingController(IProcessRecordingService processR
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PolicyNames.SocialWorkerOnly)]
+    [Authorize(Policy = PolicyNames.StaffOrAdmin)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var deleted = await processRecordingService.DeleteAsync(id, ct);
