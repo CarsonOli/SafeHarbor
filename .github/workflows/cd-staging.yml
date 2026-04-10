@@ -54,4 +54,6 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: frontend
+          # Force Vite production build, fail if raw TSX entrypoints leak through, and ship SWA config with built output.
+          app_build_command: npm run build && test -f dist/index.html && ! grep -q '/src/main.tsx' dist/index.html && cp staticwebapp.config.json dist/staticwebapp.config.json
           output_location: dist
