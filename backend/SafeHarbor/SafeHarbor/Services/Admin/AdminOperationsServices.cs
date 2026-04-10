@@ -502,40 +502,85 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         var createdAt = DateTime.UtcNow;
         var internalCode = $"AUTO-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
 
+        var residentIdColumn = await GetColumnMetadataAsync("lighthouse", "residents", "resident_id", ct);
+        var parameters = new Dictionary<string, object>
+        {
+            ["safehouse_id"] = safehouseId,
+            ["case_category"] = categoryName,
+            ["case_status"] = statusName,
+            ["date_of_admission"] = openedAt,
+            ["created_at"] = createdAt,
+            ["internal_code"] = internalCode,
+            ["assigned_social_worker"] = "system"
+        };
+
+        string insertSql;
+        if (residentIdColumn.Exists
+            && string.IsNullOrWhiteSpace(residentIdColumn.ColumnDefault)
+            && IsIntegerLikeType(residentIdColumn.DataType))
+        {
+            // NOTE: Some legacy datasets have resident_id as NOT NULL without a default sequence.
+            // We allocate the next integer key ourselves to avoid null-key insert failures.
+            var nextResidentId = await ExecuteScalarIntAsync(
+                "SELECT COALESCE(MAX(resident_id), 0)::int + 1 FROM lighthouse.residents",
+                ct);
+            parameters["resident_id"] = nextResidentId;
+            insertSql =
+                """
+                INSERT INTO lighthouse.residents (
+                    resident_id,
+                    safehouse_id,
+                    case_category,
+                    case_status,
+                    date_of_admission,
+                    created_at,
+                    internal_code,
+                    assigned_social_worker
+                )
+                VALUES (
+                    @resident_id,
+                    @safehouse_id,
+                    @case_category,
+                    @case_status,
+                    @date_of_admission,
+                    @created_at,
+                    @internal_code,
+                    @assigned_social_worker
+                )
+                RETURNING resident_id
+                """;
+        }
+        else
+        {
+            insertSql =
+                """
+                INSERT INTO lighthouse.residents (
+                    safehouse_id,
+                    case_category,
+                    case_status,
+                    date_of_admission,
+                    created_at,
+                    internal_code,
+                    assigned_social_worker
+                )
+                VALUES (
+                    @safehouse_id,
+                    @case_category,
+                    @case_status,
+                    @date_of_admission,
+                    @created_at,
+                    @internal_code,
+                    @assigned_social_worker
+                )
+                RETURNING resident_id
+                """;
+        }
+
         var row = await ExecuteReadAsync(
-            """
-            INSERT INTO lighthouse.residents (
-                safehouse_id,
-                case_category,
-                case_status,
-                date_of_admission,
-                created_at,
-                internal_code,
-                assigned_social_worker
-            )
-            VALUES (
-                @safehouse_id,
-                @case_category,
-                @case_status,
-                @date_of_admission,
-                @created_at,
-                @internal_code,
-                @assigned_social_worker
-            )
-            RETURNING resident_id
-            """,
+            insertSql,
             reader => reader.GetInt32(0),
             ct,
-            new Dictionary<string, object>
-            {
-                ["safehouse_id"] = safehouseId,
-                ["case_category"] = categoryName,
-                ["case_status"] = statusName,
-                ["date_of_admission"] = openedAt,
-                ["created_at"] = createdAt,
-                ["internal_code"] = internalCode,
-                ["assigned_social_worker"] = "system"
-            });
+            parameters);
 
         var residentId = row.First();
         return await GetLegacyResidentCaseByResidentIdAsync(residentId, ct)
@@ -716,6 +761,42 @@ public sealed class CaseloadInventoryService(SafeHarborDbContext db) : ICaseload
         var map = BuildLegacyLookupMap(statuses, "status");
         return map.TryGetValue(statusId, out var name) ? name : null;
     }
+
+    private async Task<ColumnMetadata> GetColumnMetadataAsync(
+        string schema,
+        string table,
+        string column,
+        CancellationToken ct)
+    {
+        var rows = await ExecuteReadAsync(
+            """
+            SELECT data_type, column_default
+            FROM information_schema.columns
+            WHERE table_schema = @schema
+              AND table_name = @table
+              AND column_name = @column
+            """,
+            reader => new ColumnMetadata(
+                true,
+                reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1)),
+            ct,
+            new Dictionary<string, object>
+            {
+                ["schema"] = schema,
+                ["table"] = table,
+                ["column"] = column
+            });
+
+        return rows.FirstOrDefault(new ColumnMetadata(false, string.Empty, null));
+    }
+
+    private static bool IsIntegerLikeType(string dataType) =>
+        string.Equals(dataType, "integer", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(dataType, "smallint", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(dataType, "bigint", StringComparison.OrdinalIgnoreCase);
+
+    private readonly record struct ColumnMetadata(bool Exists, string DataType, string? ColumnDefault);
 
     private static CaseloadLookupItem[] BuildLegacyLookupItems(IEnumerable<string> labels, string namespaceKey) =>
         labels
